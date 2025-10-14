@@ -4,7 +4,7 @@
     <div class="stats-section">
       <div class="stat-card online">
         <div class="stat-icon">
-          <i class="el-icon-success"></i>
+          <i class="el-icon-success" />
         </div>
         <div class="stat-info">
           <div class="stat-number">{{ onlineCount }}</div>
@@ -14,7 +14,7 @@
 
       <div class="stat-card offline">
         <div class="stat-icon">
-          <i class="el-icon-error"></i>
+          <i class="el-icon-error" />
         </div>
         <div class="stat-info">
           <div class="stat-number">{{ offlineCount }}</div>
@@ -24,7 +24,7 @@
 
       <div class="stat-card total">
         <div class="stat-icon">
-          <i class="el-icon-monitor"></i>
+          <i class="el-icon-monitor" />
         </div>
         <div class="stat-info">
           <div class="stat-number">{{ totalDevices }}</div>
@@ -34,7 +34,7 @@
 
       <div class="stat-card temperature">
         <div class="stat-icon">
-          <i class="el-icon-sunny"></i>
+          <i class="el-icon-sunny" />
         </div>
         <div class="stat-info">
           <div class="stat-number">{{ averageTemperature }}°C</div>
@@ -58,7 +58,7 @@
         <!-- 卡片头部 -->
         <div class="card-header">
           <div class="device-avatar">
-            <i class="el-icon-monitor"></i>
+            <i class="el-icon-monitor" />
           </div>
           <div class="card-title">
             <h3>{{ device.name }}</h3>
@@ -70,7 +70,7 @@
             effect="dark"
             size="mini"
           >
-            <i :class="device.online ? 'el-icon-success' : 'el-icon-error'"></i>
+            <i :class="device.online ? 'el-icon-success' : 'el-icon-error'" />
             {{ device.online ? '在线' : '离线' }}
           </el-tag>
         </div>
@@ -79,7 +79,7 @@
         <div class="card-content">
           <div class="info-grid">
             <div class="info-item">
-              <i class="el-icon-location"></i>
+              <i class="el-icon-location" />
               <div class="info-text">
                 <span class="info-label">IP地址</span>
                 <span class="info-value">{{ device.ip }}</span>
@@ -87,7 +87,7 @@
             </div>
 
             <div class="info-item">
-              <i class="el-icon-cpu"></i>
+              <i class="el-icon-cpu" />
               <div class="info-text">
                 <span class="info-label">设备型号</span>
                 <span class="info-value">{{ device.model }}</span>
@@ -104,7 +104,7 @@
                 <span class="temp-value" :class="getTemperatureClass(device.temperature)">
                   {{ device.temperature }}°C
                 </span>
-                <i class="el-icon-sunny" :class="getTemperatureClass(device.temperature)"></i>
+                <i class="el-icon-sunny" :class="getTemperatureClass(device.temperature)" />
               </div>
             </div>
 
@@ -116,7 +116,7 @@
                 :color="getLoadColor(device.memory_percent || 0)"
                 :show-text="false"
                 class="load-bar"
-              ></el-progress>
+              />
               <span class="perf-value">{{ (device.memory_percent || 0).toFixed(1) }}%</span>
             </div>
 
@@ -130,7 +130,7 @@
                     :color="getLoadColor(device.disk_percent || 0)"
                     :show-text="false"
                     class="load-bar"
-                  ></el-progress>
+                  />
                   <span class="perf-value">{{ (device.disk_percent || 0).toFixed(1) }}%</span>
                 </div>
                 <div class="storage-details">
@@ -140,14 +140,14 @@
             </div>
 
             <div class="uptime-info">
-              <i class="el-icon-timer"></i>
+              <i class="el-icon-timer" />
               <span>运行: {{ device.uptime || '未知' }}</span>
             </div>
           </div>
 
           <!-- 离线设备提示 -->
           <div v-else class="offline-info">
-            <i class="el-icon-warning"></i>
+            <i class="el-icon-warning" />
             <span>设备离线</span>
           </div>
         </div>
@@ -157,9 +157,9 @@
           <el-button
             size="mini"
             type="primary"
-            @click="pingDevice(device)"
             :loading="device.pinging"
             icon="el-icon-refresh"
+            @click="pingDevice(device)"
           >
             {{ device.pinging ? '检测中' : 'Ping' }}
           </el-button>
@@ -167,9 +167,9 @@
           <el-button
             size="mini"
             type="info"
-            @click="viewDetailedInfo(device)"
             :disabled="!device.online"
             icon="el-icon-info"
+            @click="viewDetailedInfo(device)"
           >
             详情
           </el-button>
@@ -223,14 +223,14 @@
                   <el-progress
                     :percentage="selectedDevice.memory_percent || 0"
                     :color="getLoadColor(selectedDevice.memory_percent || 0)"
-                  ></el-progress>
+                  />
                 </div>
                 <div class="chart-item">
                   <span>磁盘使用</span>
                   <el-progress
                     :percentage="selectedDevice.disk_percent || 0"
                     :color="getLoadColor(selectedDevice.disk_percent || 0)"
-                  ></el-progress>
+                  />
                 </div>
                 <div class="chart-item">
                   <span>存储空间</span>
@@ -255,7 +255,7 @@
               <div class="monitor-cards">
                 <div class="monitor-card">
                   <div class="monitor-card-header">
-                    <i class="el-icon-sunny"></i>
+                    <i class="el-icon-sunny" />
                     <h4>温度</h4>
                   </div>
                   <div class="monitor-card-content">
@@ -270,7 +270,7 @@
 
                 <div class="monitor-card">
                   <div class="monitor-card-header">
-                    <i class="el-icon-s-data"></i>
+                    <i class="el-icon-s-data" />
                     <h4>内存</h4>
                   </div>
                   <div class="monitor-card-content">
@@ -280,14 +280,14 @@
                         :percentage="selectedDevice.memory_percent || 0"
                         :color="getLoadColor(selectedDevice.memory_percent || 0)"
                         :show-text="false"
-                      ></el-progress>
+                      />
                     </div>
                   </div>
                 </div>
 
                 <div class="monitor-card">
                   <div class="monitor-card-header">
-                    <i class="el-icon-folder"></i>
+                    <i class="el-icon-folder" />
                     <h4>硬盘存储</h4>
                   </div>
                   <div class="monitor-card-content">
@@ -298,7 +298,7 @@
                         :percentage="selectedDevice.disk_percent || 0"
                         :color="getLoadColor(selectedDevice.disk_percent || 0)"
                         :show-text="false"
-                      ></el-progress>
+                      />
                     </div>
                   </div>
                 </div>
@@ -336,9 +336,9 @@
                 <p>测试与设备的网络连接状况</p>
                 <el-button
                   type="primary"
-                  @click="pingDevice(selectedDevice)"
                   :loading="selectedDevice.pinging"
                   icon="el-icon-refresh"
+                  @click="pingDevice(selectedDevice)"
                 >
                   {{ selectedDevice.pinging ? '测试中...' : '开始Ping测试' }}
                 </el-button>
@@ -349,8 +349,8 @@
                 <p>手动刷新设备的系统监控信息</p>
                 <el-button
                   type="success"
-                  @click="refreshDetailedInfo"
                   icon="el-icon-refresh"
+                  @click="refreshDetailedInfo"
                 >
                   刷新系统信息
                 </el-button>
@@ -587,23 +587,24 @@ export default {
         const result = await response.json()
 
         if (result.success && result.data) {
-          // 更新设备状态为在线
-          device.online = true
-          device.last_update = new Date()
-          device.lastSeen = new Date()
-
-          // 更新系统信息
+          const previousDiskTotal = device.disk_total || 0
           const data = result.data
-          device.temperature = data.temperature
-          device.cpu_percent = data.cpu_percent || 0
-          device.memory_percent = data.memory_percent || 0
-          device.disk_percent = data.disk_percent || 0
-          device.uptime = data.uptime || '未知'
-
-          // 如果disk_percent有值但没有具体容量信息，根据百分比估算使用量
-          if (device.disk_percent > 0 && device.disk_total > 0 && !device.disk_used) {
-            device.disk_used = (device.disk_percent / 100) * device.disk_total
+          const updates = {
+            online: true,
+            last_update: new Date(),
+            lastSeen: new Date(),
+            temperature: data.temperature,
+            cpu_percent: data.cpu_percent || 0,
+            memory_percent: data.memory_percent || 0,
+            disk_percent: data.disk_percent || 0,
+            uptime: data.uptime || '未知'
           }
+
+          if (updates.disk_percent > 0 && previousDiskTotal > 0 && !device.disk_used) {
+            updates.disk_used = (updates.disk_percent / 100) * previousDiskTotal
+          }
+
+          Object.assign(device, updates)
 
           console.log(`✅ ${device.name} (${device.node_id}) 在线，温度: ${device.temperature}°C`)
         } else {
@@ -616,14 +617,16 @@ export default {
 
     // 设置设备为离线状态
     setDeviceOffline(device, reason) {
-      device.online = false
-      device.temperature = null
-      device.cpu_percent = 0
-      device.memory_percent = 0
-      device.disk_percent = 0
-      device.disk_used = 0
-      // 保留总容量信息，不重置 disk_total
-      device.uptime = null
+      Object.assign(device, {
+        online: false,
+        temperature: null,
+        cpu_percent: 0,
+        memory_percent: 0,
+        disk_percent: 0,
+        disk_used: 0,
+        // 保留总容量信息，不重置 disk_total
+        uptime: null
+      })
       console.log(`❌ ${device.name} (${device.node_id}) 离线: ${reason}`)
     },
 
@@ -643,47 +646,51 @@ export default {
 
         if (result.success && result.data) {
           const data = result.data
+          const updates = {
+            temperature: data.temperature,
+            uptime: data.uptime,
+            processes: data.processes || []
+          }
 
-          // 更新基础信息
-          device.temperature = data.temperature
-          device.uptime = data.uptime
-
-          // 更新CPU信息
           if (data.cpu) {
-            device.cpu_percent = data.cpu.percent || 0
-            device.cpu_count = data.cpu.count
-            device.cpu_frequency = data.cpu.frequency
-            device.load_1min = data.cpu.load_1min
-            device.load_5min = data.cpu.load_5min
-            device.load_15min = data.cpu.load_15min
+            Object.assign(updates, {
+              cpu_percent: data.cpu.percent || 0,
+              cpu_count: data.cpu.count,
+              cpu_frequency: data.cpu.frequency,
+              load_1min: data.cpu.load_1min,
+              load_5min: data.cpu.load_5min,
+              load_15min: data.cpu.load_15min
+            })
           }
 
-          // 更新内存信息
           if (data.memory) {
-            device.memory_percent = data.memory.percent || 0
-            device.memory_total = data.memory.total
-            device.memory_used = data.memory.used
-            device.memory_available = data.memory.available
+            Object.assign(updates, {
+              memory_percent: data.memory.percent || 0,
+              memory_total: data.memory.total,
+              memory_used: data.memory.used,
+              memory_available: data.memory.available
+            })
           }
 
-          // 更新磁盘信息
           if (data.disk) {
-            device.disk_percent = data.disk.percent || 0
-            device.disk_total = data.disk.total || device.disk_total // 保留默认值如果API没返回
-            device.disk_used = data.disk.used || 0
-            device.disk_free = data.disk.free
+            Object.assign(updates, {
+              disk_percent: data.disk.percent || 0,
+              disk_total: data.disk.total || device.disk_total,
+              disk_used: data.disk.used || 0,
+              disk_free: data.disk.free
+            })
           }
 
-          // 更新网络信息
           if (data.network) {
-            device.network_bytes_sent = data.network.bytes_sent
-            device.network_bytes_recv = data.network.bytes_recv
-            device.network_packets_sent = data.network.packets_sent
-            device.network_packets_recv = data.network.packets_recv
+            Object.assign(updates, {
+              network_bytes_sent: data.network.bytes_sent,
+              network_bytes_recv: data.network.bytes_recv,
+              network_packets_sent: data.network.packets_sent,
+              network_packets_recv: data.network.packets_recv
+            })
           }
 
-          // 更新进程信息
-          device.processes = data.processes || []
+          Object.assign(device, updates)
 
           console.log(`✅ ${device.name} 详细信息已更新`)
         }
@@ -775,15 +782,15 @@ export default {
         const endTime = performance.now()
         const responseTime = Math.round(endTime - startTime)
 
-        device.pinging = false
-
         if (response.ok) {
           const result = await response.json()
           if (result.success) {
             this.$message.success(`${device.name} 连接成功，响应时间: ${responseTime}ms`)
             // 立即更新设备状态
-            device.online = true
-            device.lastSeen = new Date()
+            Object.assign(device, {
+              online: true,
+              lastSeen: new Date()
+            })
             // 获取最新系统信息
             await this.fetchDeviceSystemInfo(device)
           } else {
@@ -795,9 +802,10 @@ export default {
           this.setDeviceOffline(device, `HTTP ${response.status}`)
         }
       } catch (error) {
-        device.pinging = false
         this.setDeviceOffline(device, error.message)
         this.$message.error(`${device.name} 连接失败: ${error.message}`)
+      } finally {
+        Object.assign(device, { pinging: false })
       }
     },
 

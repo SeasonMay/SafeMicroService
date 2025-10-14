@@ -1,1039 +1,622 @@
 <template>
-  <div class="key-request-container">
-    <!-- 请求表单 -->
-    <div class="request-form">
-      <div class="config-section">
-        <div class="form-group">
-          <label class="form-label">作用时间</label>
-          <div class="time-config">
-            <div class="start-time">
-              <span class="time-label">开始时间</span>
-              <el-date-picker
-                v-model="form.startDate"
-                type="datetime"
-                placeholder="选择开始时间"
-                format="yyyy-MM-dd HH:mm:ss"
-                value-format="yyyy-MM-dd HH:mm:ss"
-                style="width: 100%;"
-              />
-            </div>
+  <div class="traffic-monitor-page">
+    <el-card shadow="never" class="control-bar">
+      <div class="control-group">
+        <el-date-picker
+          v-model="filters.timeRange"
+          type="datetimerange"
+          start-placeholder="开始时间"
+          end-placeholder="结束时间"
+          :default-time="['00:00:00', '23:59:59']"
+          range-separator="至"
+          style="width: 320px"
+        />
+        <el-input v-model="filters.ip" placeholder="过滤 IP 地址" clearable style="width: 160px" />
+        <el-input v-model="filters.port" placeholder="端口" clearable style="width: 120px" />
+        <el-select v-model="filters.protocol" placeholder="协议" clearable style="width: 140px">
+          <el-option v-for="item in protocols" :key="item" :label="item" :value="item" />
+        </el-select>
+        <el-radio-group v-model="filters.viewMode" size="small">
+          <el-radio-button v-for="item in viewModes" :key="item.value" :label="item.value">{{ item.label }}</el-radio-button>
+        </el-radio-group>
+        <el-button type="primary" icon="el-icon-search" @click="applyFilters">应用筛选</el-button>
+        <el-button icon="el-icon-refresh" @click="resetFilters">重置</el-button>
+      </div>
+    </el-card>
 
-            <div class="duration-select">
-              <span class="time-label">时间范围</span>
-              <el-select v-model="form.duration" style="width: 100%;" @change="onDurationChange">
-                <el-option label="一天" value="1day" />
-                <el-option label="一周" value="1week" />
-                <el-option label="一个月" value="1month" />
-                <el-option label="自定义" value="custom" />
-              </el-select>
-            </div>
-
-            <div class="end-time">
-              <span class="time-label">结束时间</span>
-              <el-date-picker
-                v-model="form.endDate"
-                type="datetime"
-                placeholder="选择结束时间"
-                format="yyyy-MM-dd HH:mm:ss"
-                value-format="yyyy-MM-dd HH:mm:ss"
-                :disabled="form.duration !== 'custom'"
-                style="width: 100%;"
-              />
-            </div>
-          </div>
-        </div>
-
-        <div class="form-group">
-          <label class="form-label">加密算法</label>
-          <el-radio-group v-model="form.algorithm" class="algorithm-group" @change="onAlgorithmChange">
-            <el-radio label="AES">AES</el-radio>
-            <el-radio label="DES">DES</el-radio>
-            <el-radio label="3DES">3DES</el-radio>
-          </el-radio-group>
-          <div class="algorithm-hint">
-            <span v-if="form.algorithm === 'AES'" class="hint-text">
-              <i class="el-icon-info" />
-              AES：高级加密标准，支持128/192/256位密钥
-            </span>
-            <span v-if="form.algorithm === 'DES'" class="hint-text">
-              <i class="el-icon-info" />
-              DES：数据加密标准，使用64位密钥
-            </span>
-            <span v-if="form.algorithm === '3DES'" class="hint-text">
-              <i class="el-icon-info" />
-              3DES：三重DES加密，支持112/168位密钥
-            </span>
-          </div>
-        </div>
-
-
-
+    <el-tabs v-model="activeTab" class="monitor-tabs" @tab-click="handleTabChange">
+      <el-tab-pane label="实时监控" name="realtime">
         <el-row :gutter="16">
-          <el-col :span="12">
-            <div class="form-group">
-              <label class="form-label">量化位数</label>
-              <el-select v-model="form.quantization" style="width: 100%;">
-                <el-option label="10位" value="10bit" />
-              </el-select>
-            </div>
+          <el-col :xs="24" :md="16">
+            <el-card shadow="hover">
+              <div slot="header" class="card-header">
+                <span>实时流量波形图</span>
+                <el-tag type="success" size="mini">实时刷新</el-tag>
+              </div>
+              <div ref="realtimeChart" class="chart-area" />
+            </el-card>
           </el-col>
-          <el-col :span="12">
-            <div class="form-group">
-              <label class="form-label">密钥长度</label>
-              <el-select v-model="form.keyLength" style="width: 100%;">
-                <el-option
-                  v-for="option in getKeyLengthOptions()"
-                  :key="option.value"
-                  :label="option.label"
-                  :value="option.value"
-                />
-              </el-select>
-            </div>
+          <el-col :xs="24" :md="8">
+            <el-card shadow="hover">
+              <div slot="header" class="card-header">
+                <span>协议分布</span>
+                <el-tag type="info" size="mini">当前 5 分钟</el-tag>
+              </div>
+              <div ref="protocolChart" class="chart-area small" />
+            </el-card>
           </el-col>
         </el-row>
-
-        <div class="form-group">
-          <label class="form-label">目标设备</label>
-          <el-radio-group v-model="form.device" class="device-group">
-            <el-radio label="raspberry">
-              <i class="el-icon-cpu" />
-              树莓派
-            </el-radio>
-            <el-radio label="orange">
-              <i class="el-icon-cpu" />
-              香橙派
-            </el-radio>
-          </el-radio-group>
-        </div>
-
-        <div class="form-group">
-          <label class="form-label">备注说明</label>
-          <el-input
-            v-model="form.description"
-            type="textarea"
-            :rows="3"
-            placeholder="请输入密钥用途或其他说明信息"
-            maxlength="200"
-            show-word-limit
-          />
-        </div>
-
-        <!-- 操作按钮 -->
-        <div class="action-buttons">
-          <el-button type="primary" size="large" :loading="submitting" @click="onSubmit">
-            <i class="el-icon-check" />
-            提交申请
-          </el-button>
-          <el-button size="large" @click="onReset">
-            <i class="el-icon-refresh" />
-            重置表单
-          </el-button>
-        </div>
-      </div>
-    </div>
-
-    <!-- 编码结果对话框 -->
-    <el-dialog
-      title="密钥生成结果（纠错+拼接+隐私放大）"
-      :visible.sync="resultDialogVisible"
-      width="90%"
-      :close-on-click-modal="false"
-    >
-      <!-- 只有当keyResult存在时才渲染内容 -->
-      <div v-if="keyResult">
-        <!-- 样本数据详情 -->
-        <div class="data-block">
-          <h4>样本数据详情（30）：</h4>
-          <div class="detailed-data-table">
-            <div class="table-header">
-              <div class="col-index">序号</div>
-              <div class="col-client-wide">Client1</div>
-              <div class="col-client-wide">Client2</div>
-              <div class="col-correction">纠错状态</div>
-              <div class="col-final">最终编码</div>
-            </div>
-            <div class="table-body">
-              <div v-for="(item, index) in getDisplayData()" :key="index" class="table-row">
-                <div class="col-index">{{ item.index }}</div>
-
-                <!-- Client1 信息 -->
-                <div class="col-client-wide">
-                  <div v-if="item.client1" class="client-info">
-                    <div class="level">级别: {{ item.client1.level || '未知' }}</div>
-                    <div class="delay">时延: {{ item.client1.delay_ms || 0 }}ms</div>
-                    <div class="hash-info">哈希: <span class="hash-value">{{ item.client1.hash || '未知' }}</span></div>
-                    <div class="gray-code">格雷码: {{ item.client1.gray_code || '未知' }}</div>
-                  </div>
-                </div>
-
-                <!-- Client2 信息 -->
-                <div class="col-client-wide">
-                  <div v-if="item.client2" class="client-info">
-                    <div class="level">级别: {{ item.client2.level || '未知' }}</div>
-                    <div class="delay">时延: {{ item.client2.delay_ms || 0 }}ms</div>
-                    <div class="hash-info">哈希: <span class="hash-value">{{ item.client2.hash || '未知' }}</span></div>
-                    <div class="gray-code original">原始: {{ item.client2.gray_code || '未知' }}</div>
-                    <div v-if="item.client2.needs_correction" class="gray-code corrected">
-                      纠错: {{ item.client2.corrected_code || '未知' }}
-                    </div>
-                  </div>
-                </div>
-
-                <!-- 纠错状态 -->
-                <div class="col-correction">
-                  <div class="correction-status">
-                    <div class="hash-match" :class="{ 'match': item.hash_match, 'mismatch': !item.hash_match }">
-                      <i :class="item.hash_match ? 'el-icon-success' : 'el-icon-warning'" />
-                      {{ item.hash_match ? '哈希匹配' : '哈希不匹配' }}
-                    </div>
-                    <div class="correction-needed" :class="{ 'needed': item.client2 && item.client2.needs_correction, 'no-need': !item.client2 || !item.client2.needs_correction }">
-                      <i :class="(item.client2 && item.client2.needs_correction) ? 'el-icon-edit' : 'el-icon-check'" />
-                      {{ (item.client2 && item.client2.needs_correction) ? '需要纠错' : '无需纠错' }}
-                    </div>
-                  </div>
-                </div>
-
-                <!-- 最终编码 -->
-                <div class="col-final">
-                  <div class="final-code">
-                    <div class="code-title">最终编码:</div>
-                    <div class="code-value">{{ item.final_code || '未知' }}</div>
-                  </div>
-                </div>
-              </div>
-            </div>
+        <el-card shadow="hover" class="table-card">
+          <div slot="header" class="card-header">
+            <span>TOP N 通信对</span>
+            <el-switch v-model="autoRefresh" active-text="自动刷新" />
           </div>
-        </div>
+          <el-table :data="topCommunications" border height="240">
+            <el-table-column prop="source" label="源地址" min-width="150" />
+            <el-table-column prop="target" label="目标地址" min-width="150" />
+            <el-table-column prop="protocol" label="协议" width="100">
+              <template slot-scope="scope">
+                <el-tag :type="protocolTag(scope.row.protocol)" size="mini">{{ scope.row.protocol }}</el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column prop="pps" label="包率 (pps)" width="140" />
+            <el-table-column prop="bandwidth" label="带宽 (Mbps)" width="160" />
+            <el-table-column prop="trend" label="趋势" width="100">
+              <template slot-scope="scope">
+                <span :class="['trend', scope.row.trend >= 0 ? 'up' : 'down']">
+                  {{ scope.row.trend >= 0 ? '+' : '' }}{{ scope.row.trend }}%
+                </span>
+              </template>
+            </el-table-column>
+          </el-table>
+        </el-card>
+      </el-tab-pane>
 
-        <!-- 最终密钥展示 -->
-        <div v-if="keyResult.final_key" class="final-key-block">
-          <h4>生成的最终密钥：</h4>
-          <div class="key-display">
-            <div class="key-info">
-              <div class="key-param">
-                <span class="key-label">适用算法:</span>
-                <span class="key-value">{{ keyResult.final_key.algorithm || '未知' }}</span>
+      <el-tab-pane label="流量分析" name="analysis">
+        <el-row :gutter="16">
+          <el-col :xs="24" :md="12">
+            <el-card shadow="hover">
+              <div slot="header" class="card-header">
+                <span>时间序列分析</span>
+                <el-select v-model="analysisGranularity" size="mini" style="width: 120px">
+                  <el-option label="分钟" value="minute" />
+                  <el-option label="小时" value="hour" />
+                  <el-option label="天" value="day" />
+                </el-select>
               </div>
-              <div class="key-param">
-                <span class="key-label">密钥长度:</span>
-                <span class="key-value">{{ keyResult.final_key.key_length_bits || 0 }} 位 ({{ keyResult.final_key.key_length_bytes || 0 }} 字节)</span>
+              <div ref="timeSeriesChart" class="chart-area" />
+            </el-card>
+          </el-col>
+          <el-col :xs="24" :md="12">
+            <el-card shadow="hover">
+              <div slot="header" class="card-header">
+                <span>协议占比分析</span>
+                <el-tag type="warning" size="mini">历史区间</el-tag>
               </div>
-              <div class="key-param">
-                <span class="key-label">量化位数:</span>
-                <span class="key-value">{{ form.quantization.replace('bit', '位') }}</span>
-              </div>
-            </div>
+              <div ref="stackedChart" class="chart-area" />
+            </el-card>
+          </el-col>
+        </el-row>
+        <el-card shadow="hover" class="table-card">
+          <div slot="header" class="card-header">
+            <span>地理分布分析</span>
+            <el-button type="text" size="mini">导出数据</el-button>
+          </div>
+          <el-table :data="geoDistribution" border height="260">
+            <el-table-column prop="region" label="地区" min-width="150" />
+            <el-table-column prop="traffic" label="流量 (GB)" width="140" />
+            <el-table-column prop="ratio" label="占比" width="120">
+              <template slot-scope="scope">
+                <el-progress :percentage="scope.row.ratio" :stroke-width="6" />
+              </template>
+            </el-table-column>
+            <el-table-column prop="trend" label="环比" width="120">
+              <template slot-scope="scope">
+                <span :class="['trend', scope.row.trend >= 0 ? 'up' : 'down']">
+                  {{ scope.row.trend >= 0 ? '+' : '' }}{{ scope.row.trend }}%
+                </span>
+              </template>
+            </el-table-column>
+          </el-table>
+        </el-card>
+      </el-tab-pane>
 
-            <div class="key-content">
-              <div class="key-full">
-                <span class="key-label">完整密钥 (十六进制):</span>
-                <el-input
-                  :value="keyResult.final_key.hex_key || ''"
-                  readonly
-                  class="key-input"
+      <el-tab-pane label="异常检测" name="anomaly">
+        <el-row :gutter="16">
+          <el-col :xs="24" :md="14">
+            <el-card shadow="hover">
+              <div slot="header" class="card-header">
+                <span>异常流量模式</span>
+                <el-tag type="danger" size="mini">实时告警</el-tag>
+              </div>
+              <div ref="anomalyChart" class="chart-area" />
+            </el-card>
+          </el-col>
+          <el-col :xs="24" :md="10">
+            <el-card shadow="hover">
+              <div slot="header" class="card-header">
+                <span>策略响应</span>
+                <el-button type="text" size="mini">调整策略</el-button>
+              </div>
+              <el-timeline>
+                <el-timeline-item
+                  v-for="action in mitigationActions"
+                  :key="action.id"
+                  :timestamp="action.time"
+                  :type="action.type"
                 >
-                  <el-button slot="append" icon="el-icon-copy-document" @click="copyKey">复制</el-button>
-                </el-input>
-              </div>
-            </div>
+                  <div class="mitigation-item">
+                    <div class="mitigation-title">{{ action.title }}</div>
+                    <p class="mitigation-desc">{{ action.description }}</p>
+                  </div>
+                </el-timeline-item>
+              </el-timeline>
+            </el-card>
+          </el-col>
+        </el-row>
+        <el-card shadow="hover" class="table-card">
+          <div slot="header" class="card-header">
+            <span>异常事件清单</span>
+            <el-tag type="info" size="mini">近 24 小时</el-tag>
           </div>
-        </div>
-      </div>
-
-      <!-- 当keyResult为null时显示的内容 -->
-      <div v-else class="no-data">
-        <p>暂无数据显示</p>
-      </div>
-
-      <span slot="footer" class="dialog-footer">
-        <el-button @click="resultDialogVisible = false">关 闭</el-button>
-      </span>
-    </el-dialog>
+          <el-table :data="anomalyEvents" border height="260">
+            <el-table-column prop="time" label="时间" width="160" />
+            <el-table-column prop="type" label="类型" width="150">
+              <template slot-scope="scope">
+                <el-tag :type="scope.row.tag" size="mini">{{ scope.row.type }}</el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column prop="source" label="源" min-width="160" />
+            <el-table-column prop="description" label="描述" min-width="240" />
+            <el-table-column prop="status" label="状态" width="120">
+              <template slot-scope="scope">
+                <el-tag :type="scope.row.statusTag" size="mini">{{ scope.row.status }}</el-tag>
+              </template>
+            </el-table-column>
+          </el-table>
+        </el-card>
+      </el-tab-pane>
+    </el-tabs>
   </div>
 </template>
 
 <script>
-import axios from 'axios'
+import * as echarts from 'echarts'
 
 export default {
-  name: 'KeyRequestForm',
+  name: 'TrafficMonitor',
   data() {
     return {
-      submitting: false,
-      resultDialogVisible: false,
-      keyResult: null,
-      form: {
-        startDate: this.getCurrentDateTime(),
-        endDate: '',
-        duration: '1day',
-        algorithm: 'AES',
-        quantization: '10bit',
-        device: 'raspberry',
-        keyLength: '128',
-        description: ''
+      filters: {
+        timeRange: [],
+        ip: '',
+        port: '',
+        protocol: '',
+        viewMode: 'realtime'
+      },
+      viewModes: [
+        { label: '实时', value: 'realtime' },
+        { label: '历史', value: 'historical' }
+      ],
+      protocols: ['HTTP', 'HTTPS', 'MQTT', 'IEC104', 'Modbus'],
+      activeTab: 'realtime',
+      autoRefresh: true,
+      analysisGranularity: 'hour',
+      topCommunications: [
+        { source: '10.1.2.11', target: '172.16.0.21', protocol: 'HTTPS', pps: 4210, bandwidth: 86, trend: 12 },
+        { source: '10.1.2.14', target: '172.16.0.34', protocol: 'HTTP', pps: 3560, bandwidth: 42, trend: -5 },
+        { source: '10.1.3.20', target: '172.16.0.82', protocol: 'MQTT', pps: 2112, bandwidth: 33, trend: 8 },
+        { source: '10.2.1.51', target: '172.16.0.99', protocol: 'IEC104', pps: 1920, bandwidth: 28, trend: 4 },
+        { source: '10.2.5.18', target: '172.16.0.45', protocol: 'Modbus', pps: 1422, bandwidth: 21, trend: -2 }
+      ],
+      geoDistribution: [
+        { region: '华东调度中心', traffic: 162, ratio: 42, trend: 6 },
+        { region: '华北监控中心', traffic: 128, ratio: 33, trend: -4 },
+        { region: '华南数据节点', traffic: 78, ratio: 18, trend: 3 },
+        { region: '西部边缘节点', traffic: 24, ratio: 7, trend: 1 }
+      ],
+      anomalyEvents: [
+        { time: '2024-07-18 13:40', type: 'DDoS 攻击', tag: 'danger', source: '北部探针 #3', description: '检测到大量 SYN 洪水攻击，已启用丢弃策略', status: '已阻断', statusTag: 'success' },
+        { time: '2024-07-18 12:58', type: '端口扫描', tag: 'warning', source: '南部探针 #1', description: '内外网边界发现高频端口探测行为', status: '观察中', statusTag: 'warning' },
+        { time: '2024-07-18 11:35', type: '异常大流量', tag: 'info', source: '东部探针 #2', description: '归档服务上传数据超出阈值，已通知负责人', status: '待确认', statusTag: 'info' }
+      ],
+      mitigationActions: [
+        { id: 1, title: '触发自动限速策略', description: '对攻击源 10.1.2.254 启动 5 分钟带宽限制', time: '13:42', type: 'danger' },
+        { id: 2, title: '联动防火墙封禁', description: '推送 6 条封禁规则至边界防火墙', time: '13:44', type: 'warning' },
+        { id: 3, title: '通知服务负责人', description: '消息队列服务负责人已确认异常波动', time: '12:02', type: 'success' }
+      ],
+      charts: {
+        realtime: null,
+        protocol: null,
+        timeSeries: null,
+        stacked: null,
+        anomaly: null
       }
     }
   },
   mounted() {
-    this.setEndDateByDuration('1day')
-    this.onAlgorithmChange(this.form.algorithm)
+    this.$nextTick(() => {
+      this.initCharts()
+      window.addEventListener('resize', this.handleResize)
+    })
+  },
+  beforeDestroy() {
+    window.removeEventListener('resize', this.handleResize)
+    this.disposeCharts()
   },
   methods: {
-    // 获取当前时间字符串
-    getCurrentDateTime() {
-      const now = new Date()
-      const year = now.getFullYear()
-      const month = String(now.getMonth() + 1).padStart(2, '0')
-      const day = String(now.getDate()).padStart(2, '0')
-      const hours = String(now.getHours()).padStart(2, '0')
-      const minutes = String(now.getMinutes()).padStart(2, '0')
-      const seconds = String(now.getSeconds()).padStart(2, '0')
-      return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`
+    initCharts() {
+      this.initRealtimeChart()
+      this.initProtocolChart()
+      this.initTimeSeriesChart()
+      this.initStackedChart()
+      this.initAnomalyChart()
     },
-
-    // 算法改变时的处理
-    onAlgorithmChange(algorithm) {
-      const defaultLengths = {
-        'AES': '128',
-        'DES': '64',
-        '3DES': '168'
-      }
-      this.form.keyLength = defaultLengths[algorithm] || '128'
-    },
-
-    // 获取密钥长度选项
-    getKeyLengthOptions() {
-      const options = {
-        'AES': [
-          { label: '128位', value: '128' },
-          { label: '192位', value: '192' },
-          { label: '256位', value: '256' }
-        ],
-        'DES': [
-          { label: '64位', value: '64' }
-        ],
-        '3DES': [
-          { label: '112位', value: '112' },
-          { label: '168位', value: '168' }
-        ]
-      }
-      return options[this.form.algorithm] || options['AES']
-    },
-
-    // 根据时间范围设置结束时间
-    onDurationChange(duration) {
-      if (duration !== 'custom') {
-        this.setEndDateByDuration(duration)
-      }
-    },
-
-    setEndDateByDuration(duration) {
-      if (duration === 'custom') {
-        return
-      }
-
-      const startDate = new Date(this.form.startDate)
-      const endDate = new Date(startDate)
-
-      switch (duration) {
-        case '1day':
-          endDate.setDate(startDate.getDate() + 1)
-          break
-        case '1week':
-          endDate.setDate(startDate.getDate() + 7)
-          break
-        case '1month':
-          endDate.setMonth(startDate.getMonth() + 1)
-          break
-      }
-
-      this.form.endDate = this.formatDateTime(endDate)
-    },
-
-    // 格式化日期时间
-    formatDateTime(date) {
-      const year = date.getFullYear()
-      const month = String(date.getMonth() + 1).padStart(2, '0')
-      const day = String(date.getDate()).padStart(2, '0')
-      const hours = String(date.getHours()).padStart(2, '0')
-      const minutes = String(date.getMinutes()).padStart(2, '0')
-      const seconds = String(date.getSeconds()).padStart(2, '0')
-      return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`
-    },
-
-    // 表单验证
-    validateForm() {
-      if (!this.form.startDate || !this.form.endDate) {
-        this.$message.error('请设置完整的作用时间')
-        return false
-      }
-
-      if (new Date(this.form.endDate) <= new Date(this.form.startDate)) {
-        this.$message.error('结束时间必须晚于开始时间')
-        return false
-      }
-
-      if (!this.form.algorithm) {
-        this.$message.error('请选择一种加密算法')
-        return false
-      }
-
-      return true
-    },
-
-    // 提交申请
-    async onSubmit() {
-      if (!this.validateForm()) {
-        return
-      }
-
-      this.submitting = true
-
-      const submitData = {
-        startTime: this.form.startDate,
-        endTime: this.form.endDate,
-        duration: this.form.duration,
-        algorithm: this.form.algorithm,
-        quantization: this.form.quantization,
-        targetDevice: this.form.device,
-        keyLength: this.form.keyLength,
-        description: this.form.description,
-        requestTime: this.getCurrentDateTime()
-      }
-
-      console.log('提交密钥申请:', submitData)
-
-      try {
-        const response = await axios.post('http://localhost:5000/api/generate-key', submitData)
-
-        if (response.data.success) {
-          this.keyResult = response.data.data
-          this.resultDialogVisible = true
-          this.$message.success('密钥生成成功！')
-
-          // 自动保存密钥信息到本地
-          this.saveKeyInfo()
-        } else {
-          this.$message.error(response.data.message || '密钥生成失败')
-        }
-      } catch (error) {
-        console.error('密钥生成错误:', error)
-
-        if (error.response && error.response.data) {
-          this.$message.error(error.response.data.message || '密钥生成失败')
-        } else {
-          this.$message.error('网络错误，请检查服务器连接')
-        }
-      } finally {
-        this.submitting = false
-      }
-    },
-
-    // 重置表单
-    onReset() {
-      this.form = {
-        startDate: this.getCurrentDateTime(),
-        endDate: '',
-        duration: '1day',
-        algorithm: 'AES',
-        quantization: '10bit',
-        device: 'raspberry',
-        keyLength: '128',
-        description: ''
-      }
-      this.setEndDateByDuration('1day')
-      this.$message.success('表单已重置')
-    },
-
-    // 获取展示数据 - 添加安全检查
-    getDisplayData() {
-      if (this.keyResult && this.keyResult.display_data && Array.isArray(this.keyResult.display_data)) {
-        return this.keyResult.display_data
-      }
-      return []
-    },
-
-    // 复制密钥到剪贴板
-    copyKey() {
-      if (this.keyResult && this.keyResult.final_key && this.keyResult.final_key.hex_key) {
-        navigator.clipboard.writeText(this.keyResult.final_key.hex_key).then(() => {
-          this.$message.success('密钥已复制到剪贴板')
-        }).catch(() => {
-          // 备用方案
-          const textArea = document.createElement('textarea')
-          textArea.value = this.keyResult.final_key.hex_key
-          document.body.appendChild(textArea)
-          textArea.select()
-          document.execCommand('copy')
-          document.body.removeChild(textArea)
-          this.$message.success('密钥已复制到剪贴板')
-        })
-      } else {
-        this.$message.warning('没有可复制的密钥')
-      }
-    },
-
-    // 保存密钥信息到本地
-    async saveKeyInfo() {
-      if (!this.keyResult || !this.keyResult.final_key) {
-        return
-      }
-
-      try {
-        const keyInfo = {
-          作用时间: {
-            开始时间: this.form.startDate,
-            结束时间: this.form.endDate
+    initRealtimeChart() {
+      if (!this.$refs.realtimeChart) return
+      this.charts.realtime = echarts.init(this.$refs.realtimeChart)
+      const base = Array.from({ length: 20 }).map((_, idx) => ({
+        time: `${idx + 1}秒`,
+        value: Math.round(30 + Math.random() * 20)
+      }))
+      this.charts.realtime.setOption({
+        tooltip: { trigger: 'axis' },
+        grid: { top: 32, left: 32, right: 16, bottom: 32 },
+        xAxis: {
+          type: 'category',
+          data: base.map(item => item.time),
+          boundaryGap: false,
+          axisLine: {
+            lineStyle: {
+              color: '#909399'
+            }
+          }
+        },
+        yAxis: {
+          type: 'value',
+          name: 'Mbps',
+          axisLine: {
+            lineStyle: {
+              color: '#909399'
+            }
           },
-          加密算法: this.form.algorithm,
-          量化位数: this.form.quantization.replace('bit', '位'),
-          密钥长度: `${this.keyResult.final_key.key_length_bits}位`,
-          密钥: this.keyResult.final_key.hex_key,
-          生成时间: this.keyResult.generation_time,
-          备注说明: this.form.description || '无'
-        }
-
-        const response = await axios.post('http://localhost:5000/api/save-key-info', {
-          keyInfo: keyInfo,
-          basePath: 'E:\\DelayKeyGeneration\\keysInfo'
-        })
-
-        if (response.data.success) {
-          console.log('密钥信息已自动保存到本地')
-        } else {
-          console.warn('密钥信息保存失败:', response.data.message)
-        }
-      } catch (error) {
-        console.error('保存密钥信息时出错:', error)
+          splitLine: {
+            lineStyle: {
+              type: 'dashed',
+              color: '#dcdfe6'
+            }
+          }
+        },
+        series: [
+          {
+            name: '实时流量',
+            type: 'line',
+            smooth: true,
+            symbol: 'circle',
+            symbolSize: 6,
+            areaStyle: {
+              color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+                { offset: 0, color: 'rgba(64, 158, 255, 0.4)' },
+                { offset: 1, color: 'rgba(64, 158, 255, 0.05)' }
+              ])
+            },
+            lineStyle: { width: 2, color: '#409EFF' },
+            itemStyle: { color: '#409EFF' },
+            data: base.map(item => item.value)
+          }
+        ]
+      })
+    },
+    initProtocolChart() {
+      if (!this.$refs.protocolChart) return
+      this.charts.protocol = echarts.init(this.$refs.protocolChart)
+      const data = [
+        { value: 42, name: 'HTTPS' },
+        { value: 28, name: 'HTTP' },
+        { value: 18, name: 'MQTT' },
+        { value: 8, name: 'IEC104' },
+        { value: 4, name: 'Modbus' }
+      ]
+      this.charts.protocol.setOption({
+        tooltip: { trigger: 'item' },
+        legend: {
+          bottom: 0,
+          textStyle: {
+            color: '#606266'
+          }
+        },
+        series: [
+          {
+            type: 'pie',
+            radius: ['35%', '65%'],
+            roseType: 'radius',
+            itemStyle: {
+              borderRadius: 6,
+              borderColor: '#fff',
+              borderWidth: 2
+            },
+            label: { formatter: '{b}: {d}%' },
+            data
+          }
+        ]
+      })
+    },
+    initTimeSeriesChart() {
+      if (!this.$refs.timeSeriesChart) return
+      this.charts.timeSeries = echarts.init(this.$refs.timeSeriesChart)
+      const categories = ['00:00', '04:00', '08:00', '12:00', '16:00', '20:00']
+      const seriesData = [320, 450, 560, 620, 580, 490]
+      this.charts.timeSeries.setOption({
+        tooltip: { trigger: 'axis' },
+        grid: { top: 32, left: 36, right: 16, bottom: 32 },
+        xAxis: {
+          type: 'category',
+          data: categories,
+          axisLine: {
+            lineStyle: {
+              color: '#909399'
+            }
+          }
+        },
+        yAxis: {
+          type: 'value',
+          name: 'GB',
+          axisLine: {
+            lineStyle: {
+              color: '#909399'
+            }
+          },
+          splitLine: {
+            lineStyle: {
+              type: 'dashed',
+              color: '#ebeef5'
+            }
+          }
+        },
+        series: [
+          {
+            name: '总流量',
+            type: 'line',
+            smooth: true,
+            symbol: 'circle',
+            itemStyle: { color: '#67C23A' },
+            lineStyle: { color: '#67C23A', width: 3 },
+            data: seriesData
+          }
+        ]
+      })
+    },
+    initStackedChart() {
+      if (!this.$refs.stackedChart) return
+      this.charts.stacked = echarts.init(this.$refs.stackedChart)
+      const categories = ['周一', '周二', '周三', '周四', '周五', '周六', '周日']
+      this.charts.stacked.setOption({
+        tooltip: { trigger: 'axis' },
+        legend: { bottom: 0 },
+        grid: { top: 32, left: 32, right: 16, bottom: 48 },
+        xAxis: {
+          type: 'category',
+          data: categories,
+          axisLine: {
+            lineStyle: {
+              color: '#909399'
+            }
+          }
+        },
+        yAxis: {
+          type: 'value',
+          name: 'GB',
+          axisLine: {
+            lineStyle: {
+              color: '#909399'
+            }
+          },
+          splitLine: {
+            lineStyle: {
+              type: 'dashed',
+              color: '#ebeef5'
+            }
+          }
+        },
+        series: [
+          {
+            name: 'HTTPS',
+            type: 'bar',
+            stack: 'total',
+            emphasis: { focus: 'series' },
+            data: [120, 132, 101, 134, 90, 230, 210]
+          },
+          {
+            name: 'HTTP',
+            type: 'bar',
+            stack: 'total',
+            emphasis: { focus: 'series' },
+            data: [220, 182, 191, 234, 290, 330, 310]
+          },
+          {
+            name: 'MQTT',
+            type: 'bar',
+            stack: 'total',
+            emphasis: { focus: 'series' },
+            data: [150, 232, 201, 154, 190, 330, 410]
+          }
+        ]
+      })
+    },
+    initAnomalyChart() {
+      if (!this.$refs.anomalyChart) return
+      this.charts.anomaly = echarts.init(this.$refs.anomalyChart)
+      const categories = ['10:00', '11:00', '12:00', '13:00', '14:00']
+      this.charts.anomaly.setOption({
+        tooltip: { trigger: 'axis' },
+        grid: { top: 32, left: 36, right: 16, bottom: 32 },
+        legend: { top: 0 },
+        xAxis: {
+          type: 'category',
+          data: categories,
+          axisLine: {
+            lineStyle: {
+              color: '#909399'
+            }
+          }
+        },
+        yAxis: {
+          type: 'value',
+          name: '事件数',
+          axisLine: {
+            lineStyle: {
+              color: '#909399'
+            }
+          },
+          splitLine: {
+            lineStyle: {
+              type: 'dashed',
+              color: '#ebeef5'
+            }
+          }
+        },
+        series: [
+          {
+            name: 'DDoS',
+            type: 'line',
+            smooth: true,
+            data: [3, 5, 4, 6, 5],
+            itemStyle: { color: '#F56C6C' }
+          },
+          {
+            name: '端口扫描',
+            type: 'line',
+            smooth: true,
+            data: [2, 2, 3, 4, 3],
+            itemStyle: { color: '#E6A23C' }
+          },
+          {
+            name: '异常大流量',
+            type: 'line',
+            smooth: true,
+            data: [1, 2, 1, 3, 2],
+            itemStyle: { color: '#409EFF' }
+          }
+        ]
+      })
+    },
+    applyFilters() {
+      this.$message.success('筛选条件已应用')
+    },
+    resetFilters() {
+      this.filters = {
+        timeRange: [],
+        ip: '',
+        port: '',
+        protocol: '',
+        viewMode: 'realtime'
       }
+      this.$message.info('筛选条件已重置')
+    },
+    protocolTag(protocol) {
+      switch (protocol) {
+        case 'HTTPS':
+          return 'success'
+        case 'HTTP':
+          return 'info'
+        case 'MQTT':
+          return 'warning'
+        case 'IEC104':
+          return 'danger'
+        default:
+          return 'default'
+      }
+    },
+    handleResize() {
+      Object.keys(this.charts).forEach(key => {
+        if (this.charts[key]) {
+          this.charts[key].resize()
+        }
+      })
+    },
+    disposeCharts() {
+      Object.keys(this.charts).forEach(key => {
+        if (this.charts[key]) {
+          this.charts[key].dispose()
+          this.charts[key] = null
+        }
+      })
+    },
+    handleTabChange() {
+      this.$nextTick(() => {
+        this.handleResize()
+      })
     }
   }
 }
 </script>
 
-<style scoped>
-.key-request-container {
-  padding: 24px;
-  background-color: #f5f7fa;
-  min-height: calc(100vh - 84px);
-}
-
-.request-form {
-  background: white;
-  border-radius: 12px;
-  padding: 32px;
-  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.08);
-}
-
-.config-section {
-  max-width: 900px;
-  margin: 0 auto;
-}
-
-.form-group {
-  margin-bottom: 24px;
-}
-
-.form-label {
-  display: block;
-  margin-bottom: 8px;
-  font-weight: 600;
-  color: #606266;
-  font-size: 14px;
-}
-
-.time-config {
-  display: grid;
-  grid-template-columns: 1fr 120px 1fr;
-  gap: 16px;
-  align-items: end;
-}
-
-.time-label {
-  display: block;
-  font-size: 12px;
-  color: #909399;
-  margin-bottom: 4px;
-}
-
-.algorithm-group {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 16px;
-}
-
-.algorithm-group .el-radio {
-  margin: 0;
-  padding: 8px 16px;
-  border: 1px solid #dcdfe6;
-  border-radius: 6px;
-  transition: all 0.3s;
-}
-
-.algorithm-group .el-radio.is-checked {
-  border-color: #409eff;
-  background-color: #ecf5ff;
-}
-
-
-
-.device-group {
-  display: flex;
-  gap: 16px;
-}
-
-.device-group .el-radio {
-  margin: 0;
-  padding: 12px 16px;
-  border: 1px solid #dcdfe6;
-  border-radius: 8px;
-  transition: all 0.3s;
-  flex: 1;
-  text-align: center;
-}
-
-.device-group .el-radio.is-checked {
-  border-color: #409eff;
-  background-color: #ecf5ff;
-}
-
-.device-group .el-radio i {
-  margin-right: 4px;
-  font-size: 16px;
-}
-
-.hint-text {
-  font-size: 13px;
-  color: #909399;
-  display: flex;
-  align-items: center;
-}
-
-.hint-text i {
-  margin-right: 4px;
-  color: #409eff;
-}
-
-.action-buttons {
-  margin-top: 32px;
-  text-align: center;
-  padding-top: 24px;
-  border-top: 1px solid #ebeef5;
-}
-
-.action-buttons .el-button {
-  min-width: 120px;
-  margin: 0 8px;
-}
-
-/* 对话框样式 */
-.result-info {
-  background-color: #f5f7fa;
+<style lang="scss" scoped>
+.traffic-monitor-page {
   padding: 16px;
-  border-radius: 8px;
-  margin-bottom: 20px;
+  background: #f5f7fa;
+  min-height: 100%;
 }
 
-.info-label {
-  font-weight: 600;
-  color: #606266;
+.control-bar {
+  margin-bottom: 16px;
+  border-radius: 12px;
+  .control-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    align-items: center;
+  }
 }
 
-.info-text {
-  color: #303133;
+.monitor-tabs ::v-deep .el-tabs__header {
+  margin-bottom: 16px;
 }
 
-/* 纠错统计样式 */
-.correction-stats {
-  background: #fff;
-  border: 1px solid #e4e7ed;
-  border-radius: 8px;
-  padding: 20px;
-  margin-bottom: 20px;
-}
-
-.correction-stats h4 {
-  margin: 0 0 16px 0;
-  font-size: 16px;
-  color: #303133;
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
   font-weight: 600;
 }
 
-.stats-grid {
-  display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  gap: 16px;
+.chart-area {
+  width: 100%;
+  height: 280px;
+  &.small {
+    height: 260px;
+  }
 }
 
-.stat-item {
-  text-align: center;
-  padding: 12px;
-  background: #f8f9fa;
-  border-radius: 6px;
-}
-
-.stat-value {
-  font-size: 20px;
-  font-weight: bold;
-  color: #409eff;
-  margin-bottom: 4px;
-}
-
-.stat-label {
-  font-size: 12px;
-  color: #909399;
-}
-
-.stat-note {
-  font-size: 10px;
-  color: #909399;
-  margin-top: 2px;
-  line-height: 1.2;
-}
-
-.stats-explanation {
+.table-card {
   margin-top: 16px;
 }
 
-.stats-explanation p {
-  margin: 4px 0;
-  font-size: 13px;
-  line-height: 1.4;
-}
-
-.data-block {
-  margin-bottom: 20px;
-}
-
-.data-block h4 {
-  margin: 0 0 10px 0;
-  font-size: 16px;
-  color: #303133;
+.trend {
   font-weight: 600;
-}
-
-/* 详细数据表格样式 */
-.detailed-data-table {
-  border: 1px solid #e4e7ed;
-  border-radius: 6px;
-  overflow: hidden;
-  background: white;
-}
-
-.table-header {
-  display: grid;
-  grid-template-columns: 60px 1fr 1fr 180px 150px;
-  background: #f5f7fa;
-  border-bottom: 1px solid #e4e7ed;
-  font-weight: 600;
-  color: #606266;
-}
-
-.table-header > div {
-  padding: 12px;
-  text-align: center;
-  border-right: 1px solid #e4e7ed;
-}
-
-.table-header > div:last-child {
-  border-right: none;
-}
-
-.table-body {
-  max-height: 600px;
-  overflow-y: auto;
-}
-
-.table-row {
-  display: grid;
-  grid-template-columns: 60px 1fr 1fr 180px 150px;
-  border-bottom: 1px solid #f0f0f0;
-  min-height: 120px;
-}
-
-.table-row:last-child {
-  border-bottom: none;
-}
-
-.table-row:hover {
-  background-color: #fafafa;
-}
-
-.col-index {
-  padding: 12px;
-  text-align: center;
-  font-weight: 600;
-  color: #409eff;
-  border-right: 1px solid #f0f0f0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.col-client-wide {
-  padding: 8px 12px;
-  border-right: 1px solid #f0f0f0;
-}
-
-.col-correction {
-  padding: 8px 12px;
-  border-right: 1px solid #f0f0f0;
-}
-
-.col-final {
-  padding: 8px 12px;
-  border-right: none;
-}
-
-.client-info {
-  font-size: 12px;
-}
-
-.client-info .level {
-  color: #409eff;
-  font-weight: 600;
-  margin-bottom: 4px;
-}
-
-.client-info .delay {
-  color: #606266;
-  margin-bottom: 4px;
-}
-
-.client-info .hash-info {
-  color: #909399;
-  margin-bottom: 4px;
-  font-size: 11px;
-}
-
-.hash-value {
-  font-family: 'Courier New', monospace;
-  background: #f0f0f0;
-  padding: 1px 4px;
-  border-radius: 2px;
-}
-
-.client-info .gray-code {
-  font-family: 'Courier New', monospace;
-  padding: 2px 6px;
-  border-radius: 4px;
-  font-size: 11px;
-  margin-bottom: 2px;
-}
-
-.gray-code.original {
-  color: #e6a23c;
-  background: #fdf6ec;
-}
-
-.gray-code.corrected {
-  color: #67c23a;
-  background: #f0f9ff;
-}
-
-.correction-status {
-  font-size: 12px;
-}
-
-.hash-match, .correction-needed {
-  margin-bottom: 6px;
-  padding: 2px 6px;
-  border-radius: 4px;
-  display: flex;
-  align-items: center;
-}
-
-.hash-match.match {
-  color: #67c23a;
-  background: #f0f9ff;
-}
-
-.hash-match.mismatch {
-  color: #f56c6c;
-  background: #fef0f0;
-}
-
-.correction-needed.needed {
-  color: #e6a23c;
-  background: #fdf6ec;
-}
-
-.correction-needed.no-need {
-  color: #67c23a;
-  background: #f0f9ff;
-}
-
-.correction-needed i, .hash-match i {
-  margin-right: 2px;
-  font-size: 10px;
-}
-
-/* 最终编码列样式 */
-.final-code {
-  font-size: 12px;
-}
-
-.final-code .code-title {
-  color: #67c23a;
-  font-weight: 600;
-  margin-bottom: 4px;
-}
-
-.final-code .code-value {
-  font-family: 'Courier New', monospace;
-  color: #303133;
-  background: #f0f9ff;
-  padding: 4px 6px;
-  border-radius: 4px;
-  font-size: 11px;
-  word-break: break-all;
-  line-height: 1.3;
-}
-
-/* 最终密钥区块样式 */
-.final-key-block {
-  background: #fff;
-  border: 1px solid #e4e7ed;
-  border-radius: 8px;
-  padding: 20px;
-  margin: 20px 0;
-  border-left: 4px solid #67c23a;
-}
-
-.final-key-block h4 {
-  margin: 0 0 16px 0;
-  font-size: 16px;
-  color: #303133;
-  font-weight: 600;
-  border-bottom: 2px solid #67c23a;
-  padding-bottom: 8px;
-}
-
-.key-display {
-  background: #f0f9ff;
-  border-radius: 6px;
-  padding: 16px;
-}
-
-.key-info {
-  display: flex;
-  gap: 24px;
-  margin-bottom: 16px;
-  padding-bottom: 12px;
-  border-bottom: 1px solid #e1f5fe;
-  flex-wrap: wrap;
-}
-
-.key-param {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.key-label {
-  font-size: 13px;
-  color: #606266;
-  font-weight: 500;
-}
-
-.key-value {
-  font-size: 13px;
-  color: #303133;
-  font-weight: 600;
-}
-
-.key-content {
-  space-y: 12px;
-}
-
-.key-full {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.key-input {
-  font-family: 'Courier New', monospace;
-}
-
-.key-input .el-input__inner {
-  font-family: inherit;
-  font-size: 13px;
-  color: #303133;
-  background: white;
-  border: 2px solid #67c23a;
-}
-
-.key-input .el-input-group__append {
-  background: #67c23a;
-  border-color: #67c23a;
-}
-
-.key-input .el-input-group__append .el-button {
-  background: transparent;
-  border: none;
-  color: white;
-}
-
-.key-input .el-input-group__append .el-button:hover {
-  background: #20a0ff;
-}
-
-/* 对话框底部按钮 */
-.dialog-footer .el-button {
-  margin-left: 8px;
-}
-
-/* 响应式设计 */
-@media (max-width: 1200px) {
-  .time-config {
-    grid-template-columns: 1fr;
-    gap: 12px;
+  &.up {
+    color: #f56c6c;
   }
-
-  .table-header,
-  .table-row {
-    grid-template-columns: 50px 1fr 1fr 140px 120px;
-  }
-
-  .key-info {
-    flex-direction: column;
-    gap: 8px;
+  &.down {
+    color: #67c23a;
   }
 }
 
-@media (max-width: 768px) {
-  .key-request-container {
-    padding: 16px;
+.mitigation-item {
+  .mitigation-title {
+    font-weight: 600;
+    margin-bottom: 4px;
   }
-
-  .request-form {
-    padding: 20px;
-  }
-
-  .table-header,
-  .table-row {
-    grid-template-columns: 1fr;
-    grid-template-rows: auto auto auto auto auto;
+  .mitigation-desc {
+    font-size: 13px;
+    color: #606266;
+    margin: 0;
   }
 }
 
-/* 滚动条样式 */
-.table-body::-webkit-scrollbar {
-  width: 6px;
-}
-
-.table-body::-webkit-scrollbar-track {
-  background: #f5f7fa;
-  border-radius: 3px;
-}
-
-.table-body::-webkit-scrollbar-thumb {
-  background: #c0c4cc;
-  border-radius: 3px;
-}
-
-.table-body::-webkit-scrollbar-thumb:hover {
-  background: #a6a9ad;
+@media (max-width: 1024px) {
+  .chart-area {
+    height: 240px;
+  }
 }
 </style>
