@@ -380,6 +380,12 @@ export default {
         deviation: null,
         anomaly: null
       }
+      return `${this.selectedCommunication.protocol} | ${this.selectedCommunication.source} → ${this.selectedCommunication.target}`
+    }
+  },
+  watch: {
+    analysisGranularity() {
+      this.updateTimeSeriesChart()
     }
   },
   computed: {
@@ -968,6 +974,7 @@ export default {
         categories: sorted.map(([, entry]) => entry.label),
         values: sorted.map(([, entry]) => Number(entry.value.toFixed(2)))
       }
+      this.$message.info('筛选条件已重置')
     },
     getTimeBucketKey(timestamp, granularity) {
       const date = new Date(timestamp)
