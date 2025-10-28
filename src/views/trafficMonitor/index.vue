@@ -383,27 +383,24 @@ export default {
       return `${this.selectedCommunication.protocol} | ${this.selectedCommunication.source} → ${this.selectedCommunication.target}`
     }
   },
-  watch: {
-    analysisGranularity() {
-      this.updateTimeSeriesChart()
-    }
-  },
   computed: {
-    protocolOptions() {
+    protocolOptions: function() {
       const options = Array.from(new Set(this.rawCommunications.map(item => item.protocol)))
       return options.sort()
     },
-    selectedPairLabel() {
+    selectedPairLabel: function() {
       if (!this.selectedCommunication) {
         return '未选择通信对'
       }
-      return `当前：${this.selectedCommunication.source}:${this.selectedCommunication.sourcePort} → ${this.selectedCommunication.target}:${this.selectedCommunication.targetPort}`
+      const pair = this.selectedCommunication
+      return `当前：${pair.source}:${pair.sourcePort} -> ${pair.target}:${pair.targetPort}`
     },
-    pairChartSubtitle() {
+    pairChartSubtitle: function() {
       if (!this.selectedCommunication) {
         return ''
       }
-      return `${this.selectedCommunication.protocol} | ${this.selectedCommunication.source}:${this.selectedCommunication.sourcePort} → ${this.selectedCommunication.target}:${this.selectedCommunication.targetPort}`
+      const pair = this.selectedCommunication
+      return `${pair.protocol} | ${pair.source}:${pair.sourcePort} -> ${pair.target}:${pair.targetPort}`
     }
   },
   watch: {
@@ -889,7 +886,7 @@ export default {
         this.updatePairTrendChart()
         return
       }
-      const currentId = this.selectedCommunication?.id
+      const currentId = this.selectedCommunication ? this.selectedCommunication.id : null
       const candidate = currentId
         ? this.displayCommunications.find(item => item.id === currentId)
         : null
@@ -959,6 +956,20 @@ export default {
       const aggregated = this.getAggregatedTimeline()
       if (!aggregated.length) {
         return { categories: [], values: [] }
+      }
+      const buckets = new Map()
+      aggregated.forEach(item => {
+        const { key, label } = this.getTimeBucketKey(item.timestamp, granularity)
+        if (!buckets.has(key)) {
+          buckets.set(key, { label, value: 0 })
+        }
+        const record = buckets.get(key)
+        record.value += item.value
+      })
+      const sorted = Array.from(buckets.entries()).sort((a, b) => a[0] - b[0])
+      return {
+        categories: sorted.map(([, entry]) => entry.label),
+        values: sorted.map(([, entry]) => Number(entry.value.toFixed(2)))
       }
       const buckets = new Map()
       aggregated.forEach(item => {
