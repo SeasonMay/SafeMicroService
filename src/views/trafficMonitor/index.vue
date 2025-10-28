@@ -334,6 +334,18 @@ export default {
         deviation: null,
         anomaly: null
       }
+      return `当前：${this.selectedCommunication.source} → ${this.selectedCommunication.target}`
+    },
+    pairChartSubtitle() {
+      if (!this.selectedCommunication) {
+        return ''
+      }
+      return `${this.selectedCommunication.protocol} | ${this.selectedCommunication.source} → ${this.selectedCommunication.target}`
+    }
+  },
+  watch: {
+    analysisGranularity() {
+      this.updateTimeSeriesChart()
     }
   },
   computed: {
