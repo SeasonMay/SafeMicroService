@@ -14,7 +14,7 @@
         <el-input v-model="filters.ip" placeholder="过滤 IP 地址" clearable style="width: 160px" />
         <el-input v-model="filters.port" placeholder="端口" clearable style="width: 120px" />
         <el-select v-model="filters.protocol" placeholder="协议" clearable style="width: 140px">
-          <el-option v-for="item in protocols" :key="item" :label="item" :value="item" />
+          <el-option v-for="item in protocolOptions" :key="item" :label="item" :value="item" />
         </el-select>
         <el-button type="primary" icon="el-icon-search" @click="applyFilters">应用筛选</el-button>
         <el-button icon="el-icon-refresh" @click="resetFilters">重置</el-button>
@@ -55,15 +55,25 @@
           <div class="topn-layout">
             <el-table
               ref="topnTable"
-              :data="topCommunications"
+              :data="displayCommunications"
               border
               height="320"
               highlight-current-row
               class="topn-table"
               @current-change="handlePairSelect"
             >
-              <el-table-column prop="source" label="源地址" min-width="150" />
-              <el-table-column prop="target" label="目标地址" min-width="150" />
+              <el-table-column label="源地址" min-width="170">
+                <template slot-scope="scope">
+                  <span>{{ scope.row.source }}</span>
+                  <span class="port">:{{ scope.row.sourcePort }}</span>
+                </template>
+              </el-table-column>
+              <el-table-column label="目标地址" min-width="170">
+                <template slot-scope="scope">
+                  <span>{{ scope.row.target }}</span>
+                  <span class="port">:{{ scope.row.targetPort }}</span>
+                </template>
+              </el-table-column>
               <el-table-column prop="protocol" label="协议" width="100">
                 <template slot-scope="scope">
                   <el-tag :type="protocolTag(scope.row.protocol)" size="mini">{{ scope.row.protocol }}</el-tag>
@@ -76,6 +86,11 @@
                   <span :class="['trend', scope.row.deviation >= 0 ? 'up' : 'down']">
                     {{ scope.row.deviation >= 0 ? '+' : '' }}{{ scope.row.deviation }}%
                   </span>
+                </template>
+              </el-table-column>
+              <el-table-column prop="lastSeen" label="最近观测" min-width="180">
+                <template slot-scope="scope">
+                  <span class="last-seen">{{ scope.row.lastSeen }}</span>
                 </template>
               </el-table-column>
             </el-table>
@@ -181,6 +196,15 @@ import * as echarts from 'echarts'
 export default {
   name: 'TrafficMonitor',
   data() {
+    const toTimestamp = timeString => new Date(timeString).getTime()
+    const pad = value => (value < 10 ? `0${value}` : `${value}`)
+    const formatDateTime = timestamp => {
+      const date = new Date(timestamp)
+      return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`
+    }
+    const computeBaseline = (bandwidth, deviation) =>
+      Number((bandwidth / (1 + deviation / 100)).toFixed(1))
+
     return {
       filters: {
         timeRange: [],
@@ -188,127 +212,149 @@ export default {
         port: '',
         protocol: ''
       },
-      protocols: ['HTTP', 'HTTPS', 'MQTT', 'IEC104', 'Modbus'],
       activeTab: 'overview',
       autoRefresh: true,
       analysisGranularity: 'hour',
-      topCommunications: [
+      rawCommunications: [
         {
+          id: 'pair-1',
           source: '10.1.2.11',
+          sourcePort: 8443,
           target: '172.16.0.21',
+          targetPort: 443,
           protocol: 'HTTPS',
           pps: 4210,
           bandwidth: 86,
+          baseline: computeBaseline(86, 18),
+          ppsRatio: 4210 / 86,
           deviation: 18,
+          window: [toTimestamp('2024-10-19T14:05:00'), toTimestamp('2024-10-19T14:50:00')],
+          lastSeen: formatDateTime(toTimestamp('2024-10-19T14:50:00')),
           timeline: [
-            { time: '14:05', value: 62 },
-            { time: '14:10', value: 65 },
-            { time: '14:15', value: 69 },
-            { time: '14:20', value: 73 },
-            { time: '14:25', value: 80 },
-            { time: '14:30', value: 88 },
-            { time: '14:35', value: 92 },
-            { time: '14:40', value: 95 },
-            { time: '14:45', value: 91 },
-            { time: '14:50', value: 86 }
+            { time: '14:05', timestamp: toTimestamp('2024-10-19T14:05:00'), value: 62 },
+            { time: '14:10', timestamp: toTimestamp('2024-10-19T14:10:00'), value: 65 },
+            { time: '14:15', timestamp: toTimestamp('2024-10-19T14:15:00'), value: 69 },
+            { time: '14:20', timestamp: toTimestamp('2024-10-19T14:20:00'), value: 73 },
+            { time: '14:25', timestamp: toTimestamp('2024-10-19T14:25:00'), value: 80 },
+            { time: '14:30', timestamp: toTimestamp('2024-10-19T14:30:00'), value: 88 },
+            { time: '14:35', timestamp: toTimestamp('2024-10-19T14:35:00'), value: 92 },
+            { time: '14:40', timestamp: toTimestamp('2024-10-19T14:40:00'), value: 95 },
+            { time: '14:45', timestamp: toTimestamp('2024-10-19T14:45:00'), value: 91 },
+            { time: '14:50', timestamp: toTimestamp('2024-10-19T14:50:00'), value: 86 }
           ]
         },
         {
+          id: 'pair-2',
           source: '10.1.2.14',
+          sourcePort: 8080,
           target: '172.16.0.34',
+          targetPort: 80,
           protocol: 'HTTP',
           pps: 3560,
           bandwidth: 42,
+          baseline: computeBaseline(42, -6),
+          ppsRatio: 3560 / 42,
           deviation: -6,
+          window: [toTimestamp('2024-10-19T14:05:00'), toTimestamp('2024-10-19T14:50:00')],
+          lastSeen: formatDateTime(toTimestamp('2024-10-19T14:50:00')),
           timeline: [
-            { time: '14:05', value: 44 },
-            { time: '14:10', value: 45 },
-            { time: '14:15', value: 43 },
-            { time: '14:20', value: 40 },
-            { time: '14:25', value: 39 },
-            { time: '14:30', value: 37 },
-            { time: '14:35', value: 36 },
-            { time: '14:40', value: 34 },
-            { time: '14:45', value: 33 },
-            { time: '14:50', value: 32 }
+            { time: '14:05', timestamp: toTimestamp('2024-10-19T14:05:00'), value: 44 },
+            { time: '14:10', timestamp: toTimestamp('2024-10-19T14:10:00'), value: 45 },
+            { time: '14:15', timestamp: toTimestamp('2024-10-19T14:15:00'), value: 43 },
+            { time: '14:20', timestamp: toTimestamp('2024-10-19T14:20:00'), value: 40 },
+            { time: '14:25', timestamp: toTimestamp('2024-10-19T14:25:00'), value: 39 },
+            { time: '14:30', timestamp: toTimestamp('2024-10-19T14:30:00'), value: 37 },
+            { time: '14:35', timestamp: toTimestamp('2024-10-19T14:35:00'), value: 36 },
+            { time: '14:40', timestamp: toTimestamp('2024-10-19T14:40:00'), value: 34 },
+            { time: '14:45', timestamp: toTimestamp('2024-10-19T14:45:00'), value: 33 },
+            { time: '14:50', timestamp: toTimestamp('2024-10-19T14:50:00'), value: 32 }
           ]
         },
         {
+          id: 'pair-3',
           source: '10.1.3.20',
+          sourcePort: 1883,
           target: '172.16.0.82',
+          targetPort: 3883,
           protocol: 'MQTT',
           pps: 2112,
           bandwidth: 33,
+          baseline: computeBaseline(33, 12),
+          ppsRatio: 2112 / 33,
           deviation: 12,
+          window: [toTimestamp('2024-10-19T14:05:00'), toTimestamp('2024-10-19T14:50:00')],
+          lastSeen: formatDateTime(toTimestamp('2024-10-19T14:50:00')),
           timeline: [
-            { time: '14:05', value: 22 },
-            { time: '14:10', value: 25 },
-            { time: '14:15', value: 26 },
-            { time: '14:20', value: 28 },
-            { time: '14:25', value: 29 },
-            { time: '14:30', value: 31 },
-            { time: '14:35', value: 33 },
-            { time: '14:40', value: 36 },
-            { time: '14:45', value: 35 },
-            { time: '14:50', value: 34 }
+            { time: '14:05', timestamp: toTimestamp('2024-10-19T14:05:00'), value: 22 },
+            { time: '14:10', timestamp: toTimestamp('2024-10-19T14:10:00'), value: 25 },
+            { time: '14:15', timestamp: toTimestamp('2024-10-19T14:15:00'), value: 26 },
+            { time: '14:20', timestamp: toTimestamp('2024-10-19T14:20:00'), value: 28 },
+            { time: '14:25', timestamp: toTimestamp('2024-10-19T14:25:00'), value: 29 },
+            { time: '14:30', timestamp: toTimestamp('2024-10-19T14:30:00'), value: 31 },
+            { time: '14:35', timestamp: toTimestamp('2024-10-19T14:35:00'), value: 33 },
+            { time: '14:40', timestamp: toTimestamp('2024-10-19T14:40:00'), value: 36 },
+            { time: '14:45', timestamp: toTimestamp('2024-10-19T14:45:00'), value: 35 },
+            { time: '14:50', timestamp: toTimestamp('2024-10-19T14:50:00'), value: 34 }
           ]
         },
         {
+          id: 'pair-4',
           source: '10.2.1.51',
+          sourcePort: 2404,
           target: '172.16.0.99',
+          targetPort: 2404,
           protocol: 'IEC104',
           pps: 1920,
           bandwidth: 28,
+          baseline: computeBaseline(28, 5),
+          ppsRatio: 1920 / 28,
           deviation: 5,
+          window: [toTimestamp('2024-10-19T14:05:00'), toTimestamp('2024-10-19T14:50:00')],
+          lastSeen: formatDateTime(toTimestamp('2024-10-19T14:50:00')),
           timeline: [
-            { time: '14:05', value: 21 },
-            { time: '14:10', value: 22 },
-            { time: '14:15', value: 24 },
-            { time: '14:20', value: 26 },
-            { time: '14:25', value: 27 },
-            { time: '14:30', value: 28 },
-            { time: '14:35', value: 29 },
-            { time: '14:40', value: 28 },
-            { time: '14:45', value: 27 },
-            { time: '14:50', value: 26 }
+            { time: '14:05', timestamp: toTimestamp('2024-10-19T14:05:00'), value: 21 },
+            { time: '14:10', timestamp: toTimestamp('2024-10-19T14:10:00'), value: 22 },
+            { time: '14:15', timestamp: toTimestamp('2024-10-19T14:15:00'), value: 24 },
+            { time: '14:20', timestamp: toTimestamp('2024-10-19T14:20:00'), value: 26 },
+            { time: '14:25', timestamp: toTimestamp('2024-10-19T14:25:00'), value: 27 },
+            { time: '14:30', timestamp: toTimestamp('2024-10-19T14:30:00'), value: 28 },
+            { time: '14:35', timestamp: toTimestamp('2024-10-19T14:35:00'), value: 29 },
+            { time: '14:40', timestamp: toTimestamp('2024-10-19T14:40:00'), value: 28 },
+            { time: '14:45', timestamp: toTimestamp('2024-10-19T14:45:00'), value: 27 },
+            { time: '14:50', timestamp: toTimestamp('2024-10-19T14:50:00'), value: 26 }
           ]
         },
         {
+          id: 'pair-5',
           source: '10.2.5.18',
+          sourcePort: 502,
           target: '172.16.0.45',
+          targetPort: 1502,
           protocol: 'Modbus',
           pps: 1422,
           bandwidth: 21,
+          baseline: computeBaseline(21, -3),
+          ppsRatio: 1422 / 21,
           deviation: -3,
+          window: [toTimestamp('2024-10-19T14:05:00'), toTimestamp('2024-10-19T14:50:00')],
+          lastSeen: formatDateTime(toTimestamp('2024-10-19T14:50:00')),
           timeline: [
-            { time: '14:05', value: 23 },
-            { time: '14:10', value: 23 },
-            { time: '14:15', value: 22 },
-            { time: '14:20', value: 21 },
-            { time: '14:25', value: 20 },
-            { time: '14:30', value: 20 },
-            { time: '14:35', value: 19 },
-            { time: '14:40', value: 18 },
-            { time: '14:45', value: 18 },
-            { time: '14:50', value: 17 }
+            { time: '14:05', timestamp: toTimestamp('2024-10-19T14:05:00'), value: 23 },
+            { time: '14:10', timestamp: toTimestamp('2024-10-19T14:10:00'), value: 23 },
+            { time: '14:15', timestamp: toTimestamp('2024-10-19T14:15:00'), value: 22 },
+            { time: '14:20', timestamp: toTimestamp('2024-10-19T14:20:00'), value: 21 },
+            { time: '14:25', timestamp: toTimestamp('2024-10-19T14:25:00'), value: 20 },
+            { time: '14:30', timestamp: toTimestamp('2024-10-19T14:30:00'), value: 20 },
+            { time: '14:35', timestamp: toTimestamp('2024-10-19T14:35:00'), value: 19 },
+            { time: '14:40', timestamp: toTimestamp('2024-10-19T14:40:00'), value: 18 },
+            { time: '14:45', timestamp: toTimestamp('2024-10-19T14:45:00'), value: 18 },
+            { time: '14:50', timestamp: toTimestamp('2024-10-19T14:50:00'), value: 17 }
           ]
         }
       ],
+      displayCommunications: [],
       selectedCommunication: null,
-      timeSeriesPresets: {
-        minute: {
-          categories: ['14:41', '14:42', '14:43', '14:44', '14:45', '14:46', '14:47', '14:48', '14:49', '14:50'],
-          values: [82, 84, 87, 86, 88, 92, 95, 97, 93, 90]
-        },
-        hour: {
-          categories: ['08:00', '10:00', '12:00', '14:00', '16:00', '18:00', '20:00'],
-          values: [160, 180, 210, 245, 268, 256, 242]
-        },
-        day: {
-          categories: ['周一', '周二', '周三', '周四', '周五', '周六', '周日'],
-          values: [1320, 1460, 1580, 1660, 1730, 1420, 1180]
-        }
-      },
+      autoRefreshTimer: null,
       callDeviation: [
         { name: '负荷预测 → 调度主站', baseline: 120, actual: 168 },
         { name: '场站 AGC → AGC 集中器', baseline: 96, actual: 142 },
@@ -334,12 +380,6 @@ export default {
         deviation: null,
         anomaly: null
       }
-      return `当前：${this.selectedCommunication.source} → ${this.selectedCommunication.target}`
-    },
-    pairChartSubtitle() {
-      if (!this.selectedCommunication) {
-        return ''
-      }
       return `${this.selectedCommunication.protocol} | ${this.selectedCommunication.source} → ${this.selectedCommunication.target}`
     }
   },
@@ -349,38 +389,59 @@ export default {
     }
   },
   computed: {
+    protocolOptions() {
+      const options = Array.from(new Set(this.rawCommunications.map(item => item.protocol)))
+      return options.sort()
+    },
     selectedPairLabel() {
       if (!this.selectedCommunication) {
         return '未选择通信对'
       }
-      return `当前：${this.selectedCommunication.source} → ${this.selectedCommunication.target}`
+      return `当前：${this.selectedCommunication.source}:${this.selectedCommunication.sourcePort} → ${this.selectedCommunication.target}:${this.selectedCommunication.targetPort}`
     },
     pairChartSubtitle() {
       if (!this.selectedCommunication) {
         return ''
       }
-      return `${this.selectedCommunication.protocol} | ${this.selectedCommunication.source} → ${this.selectedCommunication.target}`
+      return `${this.selectedCommunication.protocol} | ${this.selectedCommunication.source}:${this.selectedCommunication.sourcePort} → ${this.selectedCommunication.target}:${this.selectedCommunication.targetPort}`
     }
   },
   watch: {
     analysisGranularity() {
       this.updateTimeSeriesChart()
+    },
+    autoRefresh(value) {
+      if (value) {
+        this.startAutoRefresh()
+      } else {
+        this.stopAutoRefresh()
+      }
+    },
+    displayCommunications: {
+      handler() {
+        this.$nextTick(() => {
+          this.ensureSelection()
+          this.refreshCharts()
+        })
+      },
+      deep: true
     }
   },
   mounted() {
+    this.filterCommunications()
+    this.selectedCommunication = this.displayCommunications[0] || null
     this.$nextTick(() => {
-      this.selectedCommunication = this.topCommunications[0] || null
       this.initCharts()
       window.addEventListener('resize', this.handleResize)
-      this.$nextTick(() => {
-        if (this.$refs.topnTable && this.selectedCommunication) {
-          this.$refs.topnTable.setCurrentRow(this.selectedCommunication)
-        }
-      })
+      this.ensureSelection()
+      if (this.autoRefresh) {
+        this.startAutoRefresh()
+      }
     })
   },
   beforeDestroy() {
     window.removeEventListener('resize', this.handleResize)
+    this.stopAutoRefresh()
     this.disposeCharts()
   },
   methods: {
@@ -395,16 +456,24 @@ export default {
     initOverviewChart() {
       if (!this.$refs.overviewChart) return
       this.charts.overview = echarts.init(this.$refs.overviewChart)
-      const baseTimes = this.topCommunications[0]?.timeline.map(item => item.time) || []
-      const totals = baseTimes.map((_, idx) =>
-        this.topCommunications.reduce((sum, pair) => sum + (pair.timeline[idx]?.value || 0), 0)
-      )
+      this.updateOverviewChart()
+    },
+    updateOverviewChart() {
+      if (!this.charts.overview) return
+      const aggregated = this.getAggregatedTimeline()
+      if (!aggregated.length) {
+        this.setChartEmptyState(this.charts.overview, '暂无流量数据')
+        return
+      }
+      const categories = aggregated.map(item => item.label)
+      const totals = aggregated.map(item => Number(item.value.toFixed(2)))
+      this.charts.overview.clear()
       this.charts.overview.setOption({
         tooltip: { trigger: 'axis' },
         grid: { top: 32, left: 32, right: 16, bottom: 32 },
         xAxis: {
           type: 'category',
-          data: baseTimes,
+          data: categories,
           boundaryGap: false,
           axisLine: {
             lineStyle: {
@@ -450,13 +519,24 @@ export default {
     initProtocolChart() {
       if (!this.$refs.protocolChart) return
       this.charts.protocol = echarts.init(this.$refs.protocolChart)
-      const data = [
-        { value: 42, name: 'HTTPS' },
-        { value: 28, name: 'HTTP' },
-        { value: 18, name: 'MQTT' },
-        { value: 8, name: 'IEC104' },
-        { value: 4, name: 'Modbus' }
-      ]
+      this.updateProtocolChart()
+    },
+    updateProtocolChart() {
+      if (!this.charts.protocol) return
+      const totals = this.displayCommunications.reduce((map, item) => {
+        const current = map.get(item.protocol) || 0
+        map.set(item.protocol, current + item.bandwidth)
+        return map
+      }, new Map())
+      if (!totals.size) {
+        this.setChartEmptyState(this.charts.protocol, '暂无协议分布')
+        return
+      }
+      const data = Array.from(totals.entries()).map(([name, value]) => ({
+        name,
+        value: Number(value.toFixed(1))
+      }))
+      this.charts.protocol.clear()
       this.charts.protocol.setOption({
         tooltip: { trigger: 'item' },
         legend: {
@@ -488,29 +568,13 @@ export default {
     },
     updatePairTrendChart() {
       if (!this.charts.pairTrend) return
-      const categories = this.selectedCommunication?.timeline.map(item => item.time) || []
-      const values = this.selectedCommunication?.timeline.map(item => item.value) || []
-      let series = []
-      if (this.selectedCommunication) {
-        series = [
-          {
-            name: '通信对流量',
-            type: 'line',
-            smooth: true,
-            symbol: 'circle',
-            symbolSize: 6,
-            lineStyle: { width: 2, color: '#67C23A' },
-            itemStyle: { color: '#67C23A' },
-            areaStyle: {
-              color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-                { offset: 0, color: 'rgba(103, 194, 58, 0.35)' },
-                { offset: 1, color: 'rgba(103, 194, 58, 0.05)' }
-              ])
-            },
-            data: values
-          }
-        ]
+      if (!this.selectedCommunication || !this.selectedCommunication.timeline.length) {
+        this.setChartEmptyState(this.charts.pairTrend, '选择通信对以查看波形')
+        return
       }
+      const categories = this.selectedCommunication.timeline.map(item => item.time)
+      const values = this.selectedCommunication.timeline.map(item => Number(item.value.toFixed(2)))
+      this.charts.pairTrend.clear()
       this.charts.pairTrend.setOption({
         tooltip: { trigger: 'axis' },
         grid: { top: 24, left: 32, right: 16, bottom: 32 },
@@ -539,7 +603,24 @@ export default {
             }
           }
         },
-        series
+        series: [
+          {
+            name: '通信对流量',
+            type: 'line',
+            smooth: true,
+            symbol: 'circle',
+            symbolSize: 6,
+            lineStyle: { width: 2, color: '#67C23A' },
+            itemStyle: { color: '#67C23A' },
+            areaStyle: {
+              color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+                { offset: 0, color: 'rgba(103, 194, 58, 0.35)' },
+                { offset: 1, color: 'rgba(103, 194, 58, 0.05)' }
+              ])
+            },
+            data: values
+          }
+        ]
       })
     },
     initTimeSeriesChart() {
@@ -549,8 +630,12 @@ export default {
     },
     updateTimeSeriesChart() {
       if (!this.charts.timeSeries) return
-      const preset = this.timeSeriesPresets[this.analysisGranularity]
-      if (!preset) return
+      const preset = this.computeTimeSeries(this.analysisGranularity)
+      if (!preset.categories.length) {
+        this.setChartEmptyState(this.charts.timeSeries, '暂无时间序列数据')
+        return
+      }
+      this.charts.timeSeries.clear()
       this.charts.timeSeries.setOption({
         tooltip: { trigger: 'axis' },
         grid: { top: 32, left: 36, right: 16, bottom: 32 },
@@ -565,7 +650,7 @@ export default {
         },
         yAxis: {
           type: 'value',
-          name: 'GB',
+          name: 'Mbps',
           axisLine: {
             lineStyle: {
               color: '#909399'
@@ -720,6 +805,7 @@ export default {
       })
     },
     applyFilters() {
+      this.filterCommunications()
       this.$message.success('筛选条件已应用')
     },
     resetFilters() {
@@ -729,6 +815,7 @@ export default {
         port: '',
         protocol: ''
       }
+      this.filterCommunications()
       this.$message.info('筛选条件已重置')
     },
     protocolTag(protocol) {
@@ -767,6 +854,175 @@ export default {
     handleTabChange() {
       this.$nextTick(() => {
         this.handleResize()
+      })
+    },
+    filterCommunications() {
+      const { ip, port, protocol, timeRange } = this.filters
+      const [start, end] =
+        timeRange && timeRange.length === 2 ? timeRange.map(item => item.getTime()) : [null, null]
+      const ipKeyword = ip.trim()
+      const portKeyword = port.trim()
+      const filtered = this.rawCommunications.filter(item => {
+        const ipMatch =
+          !ipKeyword || item.source.includes(ipKeyword) || item.target.includes(ipKeyword)
+        const portMatch =
+          !portKeyword ||
+          item.sourcePort.toString() === portKeyword ||
+          item.targetPort.toString() === portKeyword
+        const protocolMatch = !protocol || item.protocol === protocol
+        const timeMatch =
+          !start || !end
+            ? true
+            : item.timeline.some(point => point.timestamp >= start && point.timestamp <= end)
+        return ipMatch && portMatch && protocolMatch && timeMatch
+      })
+      const sorted = filtered.slice().sort((a, b) => b.bandwidth - a.bandwidth)
+      this.displayCommunications = sorted.slice(0, 10)
+    },
+    ensureSelection() {
+      if (!this.$refs.topnTable) {
+        return
+      }
+      if (!this.displayCommunications.length) {
+        this.$refs.topnTable.setCurrentRow()
+        this.selectedCommunication = null
+        this.updatePairTrendChart()
+        return
+      }
+      const currentId = this.selectedCommunication?.id
+      const candidate = currentId
+        ? this.displayCommunications.find(item => item.id === currentId)
+        : null
+      this.selectedCommunication = candidate || this.displayCommunications[0]
+      this.$nextTick(() => {
+        if (this.$refs.topnTable) {
+          this.$refs.topnTable.setCurrentRow(this.selectedCommunication)
+        }
+        this.updatePairTrendChart()
+      })
+    },
+    refreshCharts() {
+      this.updateOverviewChart()
+      this.updateProtocolChart()
+      this.updatePairTrendChart()
+      this.updateTimeSeriesChart()
+    },
+    startAutoRefresh() {
+      this.stopAutoRefresh()
+      this.autoRefreshTimer = setInterval(() => {
+        this.simulateRealtimeUpdate()
+      }, 5000)
+    },
+    stopAutoRefresh() {
+      if (this.autoRefreshTimer) {
+        clearInterval(this.autoRefreshTimer)
+        this.autoRefreshTimer = null
+      }
+    },
+    simulateRealtimeUpdate() {
+      const step = 5 * 60 * 1000
+      this.rawCommunications.forEach(item => {
+        const lastPoint = item.timeline[item.timeline.length - 1]
+        const nextTimestamp = (lastPoint ? lastPoint.timestamp : Date.now()) + step
+        const drift = 0.92 + Math.random() * 0.18
+        const baseValue = lastPoint ? lastPoint.value : item.bandwidth
+        const nextValue = Math.max(5, Number((baseValue * drift).toFixed(1)))
+        item.timeline.push({
+          time: this.formatTime(nextTimestamp),
+          timestamp: nextTimestamp,
+          value: nextValue
+        })
+        if (item.timeline.length > 12) {
+          item.timeline.shift()
+        }
+        item.window = [item.timeline[0].timestamp, item.timeline[item.timeline.length - 1].timestamp]
+        item.bandwidth = nextValue
+        item.pps = Math.round(item.bandwidth * item.ppsRatio)
+        item.deviation = Number((((item.bandwidth - item.baseline) / item.baseline) * 100).toFixed(1))
+        item.lastSeen = this.formatDateTime(item.window[1])
+      })
+      this.filterCommunications()
+    },
+    getAggregatedTimeline() {
+      const buckets = new Map()
+      this.displayCommunications.forEach(item => {
+        item.timeline.forEach(point => {
+          const current = buckets.get(point.timestamp) || { timestamp: point.timestamp, label: point.time, value: 0 }
+          current.value += point.value
+          current.label = point.time
+          buckets.set(point.timestamp, current)
+        })
+      })
+      return Array.from(buckets.values()).sort((a, b) => a.timestamp - b.timestamp)
+    },
+    computeTimeSeries(granularity) {
+      const aggregated = this.getAggregatedTimeline()
+      if (!aggregated.length) {
+        return { categories: [], values: [] }
+      }
+      const buckets = new Map()
+      aggregated.forEach(item => {
+        const { key, label } = this.getTimeBucketKey(item.timestamp, granularity)
+        if (!buckets.has(key)) {
+          buckets.set(key, { label, value: 0 })
+        }
+        const record = buckets.get(key)
+        record.value += item.value
+      })
+      const sorted = Array.from(buckets.entries()).sort((a, b) => a[0] - b[0])
+      return {
+        categories: sorted.map(([, entry]) => entry.label),
+        values: sorted.map(([, entry]) => Number(entry.value.toFixed(2)))
+      }
+      this.$message.info('筛选条件已重置')
+    },
+    getTimeBucketKey(timestamp, granularity) {
+      const date = new Date(timestamp)
+      if (granularity === 'minute') {
+        const key = new Date(
+          date.getFullYear(),
+          date.getMonth(),
+          date.getDate(),
+          date.getHours(),
+          date.getMinutes()
+        ).getTime()
+        return { key, label: this.formatTime(key) }
+      }
+      if (granularity === 'hour') {
+        const key = new Date(date.getFullYear(), date.getMonth(), date.getDate(), date.getHours()).getTime()
+        return { key, label: `${this.pad(date.getHours())}:00` }
+      }
+      const dayLabels = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
+      const day = date.getDay()
+      return { key: day, label: dayLabels[day] }
+    },
+    formatTime(timestamp) {
+      const date = new Date(timestamp)
+      return `${this.pad(date.getHours())}:${this.pad(date.getMinutes())}`
+    },
+    formatDateTime(timestamp) {
+      const date = new Date(timestamp)
+      return `${date.getFullYear()}-${this.pad(date.getMonth() + 1)}-${this.pad(date.getDate())} ${this.pad(date.getHours())}:${this.pad(date.getMinutes())}`
+    },
+    pad(value) {
+      return value < 10 ? `0${value}` : `${value}`
+    },
+    setChartEmptyState(chart, message) {
+      if (!chart) {
+        return
+      }
+      chart.clear()
+      chart.setOption({
+        title: {
+          text: message,
+          left: 'center',
+          top: 'middle',
+          textStyle: {
+            color: '#909399',
+            fontSize: 14,
+            fontWeight: 500
+          }
+        }
       })
     }
   }
@@ -864,6 +1120,17 @@ export default {
   &.down {
     color: #67c23a;
   }
+}
+
+.port {
+  margin-left: 4px;
+  color: #409eff;
+  font-weight: 600;
+}
+
+.last-seen {
+  font-size: 13px;
+  color: #606266;
 }
 
 .mitigation-item {
