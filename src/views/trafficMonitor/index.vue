@@ -1,1039 +1,1163 @@
 <template>
-  <div class="key-request-container">
-    <!-- 请求表单 -->
-    <div class="request-form">
-      <div class="config-section">
-        <div class="form-group">
-          <label class="form-label">作用时间</label>
-          <div class="time-config">
-            <div class="start-time">
-              <span class="time-label">开始时间</span>
-              <el-date-picker
-                v-model="form.startDate"
-                type="datetime"
-                placeholder="选择开始时间"
-                format="yyyy-MM-dd HH:mm:ss"
-                value-format="yyyy-MM-dd HH:mm:ss"
-                style="width: 100%;"
-              />
-            </div>
+  <div class="traffic-monitor-page">
+    <el-card shadow="never" class="control-bar">
+      <div class="control-group">
+        <el-date-picker
+          v-model="filters.timeRange"
+          type="datetimerange"
+          start-placeholder="开始时间"
+          end-placeholder="结束时间"
+          :default-time="['00:00:00', '23:59:59']"
+          range-separator="至"
+          style="width: 320px"
+        />
+        <el-input v-model="filters.ip" placeholder="过滤 IP 地址" clearable style="width: 160px" />
+        <el-input v-model="filters.port" placeholder="端口" clearable style="width: 120px" />
+        <el-select v-model="filters.protocol" placeholder="协议" clearable style="width: 140px">
+          <el-option v-for="item in protocolOptions" :key="item" :label="item" :value="item" />
+        </el-select>
+        <el-button type="primary" icon="el-icon-search" @click="applyFilters">应用筛选</el-button>
+        <el-button icon="el-icon-refresh" @click="resetFilters">重置</el-button>
+      </div>
+    </el-card>
 
-            <div class="duration-select">
-              <span class="time-label">时间范围</span>
-              <el-select v-model="form.duration" style="width: 100%;" @change="onDurationChange">
-                <el-option label="一天" value="1day" />
-                <el-option label="一周" value="1week" />
-                <el-option label="一个月" value="1month" />
-                <el-option label="自定义" value="custom" />
-              </el-select>
-            </div>
-
-            <div class="end-time">
-              <span class="time-label">结束时间</span>
-              <el-date-picker
-                v-model="form.endDate"
-                type="datetime"
-                placeholder="选择结束时间"
-                format="yyyy-MM-dd HH:mm:ss"
-                value-format="yyyy-MM-dd HH:mm:ss"
-                :disabled="form.duration !== 'custom'"
-                style="width: 100%;"
-              />
-            </div>
-          </div>
-        </div>
-
-        <div class="form-group">
-          <label class="form-label">加密算法</label>
-          <el-radio-group v-model="form.algorithm" class="algorithm-group" @change="onAlgorithmChange">
-            <el-radio label="AES">AES</el-radio>
-            <el-radio label="DES">DES</el-radio>
-            <el-radio label="3DES">3DES</el-radio>
-          </el-radio-group>
-          <div class="algorithm-hint">
-            <span v-if="form.algorithm === 'AES'" class="hint-text">
-              <i class="el-icon-info" />
-              AES：高级加密标准，支持128/192/256位密钥
-            </span>
-            <span v-if="form.algorithm === 'DES'" class="hint-text">
-              <i class="el-icon-info" />
-              DES：数据加密标准，使用64位密钥
-            </span>
-            <span v-if="form.algorithm === '3DES'" class="hint-text">
-              <i class="el-icon-info" />
-              3DES：三重DES加密，支持112/168位密钥
-            </span>
-          </div>
-        </div>
-
-
-
+    <el-tabs v-model="activeTab" class="monitor-tabs" @tab-click="handleTabChange">
+      <el-tab-pane label="流量洞察" name="overview">
         <el-row :gutter="16">
-          <el-col :span="12">
-            <div class="form-group">
-              <label class="form-label">量化位数</label>
-              <el-select v-model="form.quantization" style="width: 100%;">
-                <el-option label="10位" value="10bit" />
-              </el-select>
-            </div>
+          <el-col :xs="24" :md="16">
+            <el-card shadow="hover">
+              <div slot="header" class="card-header">
+                <span>实时总流量波形</span>
+                <el-tag type="success" size="mini">刷新间隔 5s</el-tag>
+              </div>
+              <div ref="overviewChart" class="chart-area" />
+            </el-card>
           </el-col>
-          <el-col :span="12">
-            <div class="form-group">
-              <label class="form-label">密钥长度</label>
-              <el-select v-model="form.keyLength" style="width: 100%;">
-                <el-option
-                  v-for="option in getKeyLengthOptions()"
-                  :key="option.value"
-                  :label="option.label"
-                  :value="option.value"
-                />
-              </el-select>
-            </div>
+          <el-col :xs="24" :md="8">
+            <el-card shadow="hover">
+              <div slot="header" class="card-header">
+                <span>协议流量占比</span>
+                <el-tag type="info" size="mini">当前 5 分钟</el-tag>
+              </div>
+              <div ref="protocolChart" class="chart-area small" />
+            </el-card>
           </el-col>
         </el-row>
 
-        <div class="form-group">
-          <label class="form-label">目标设备</label>
-          <el-radio-group v-model="form.device" class="device-group">
-            <el-radio label="raspberry">
-              <i class="el-icon-cpu" />
-              树莓派
-            </el-radio>
-            <el-radio label="orange">
-              <i class="el-icon-cpu" />
-              香橙派
-            </el-radio>
-          </el-radio-group>
-        </div>
-
-        <div class="form-group">
-          <label class="form-label">备注说明</label>
-          <el-input
-            v-model="form.description"
-            type="textarea"
-            :rows="3"
-            placeholder="请输入密钥用途或其他说明信息"
-            maxlength="200"
-            show-word-limit
-          />
-        </div>
-
-        <!-- 操作按钮 -->
-        <div class="action-buttons">
-          <el-button type="primary" size="large" :loading="submitting" @click="onSubmit">
-            <i class="el-icon-check" />
-            提交申请
-          </el-button>
-          <el-button size="large" @click="onReset">
-            <i class="el-icon-refresh" />
-            重置表单
-          </el-button>
-        </div>
-      </div>
-    </div>
-
-    <!-- 编码结果对话框 -->
-    <el-dialog
-      title="密钥生成结果（纠错+拼接+隐私放大）"
-      :visible.sync="resultDialogVisible"
-      width="90%"
-      :close-on-click-modal="false"
-    >
-      <!-- 只有当keyResult存在时才渲染内容 -->
-      <div v-if="keyResult">
-        <!-- 样本数据详情 -->
-        <div class="data-block">
-          <h4>样本数据详情（30）：</h4>
-          <div class="detailed-data-table">
-            <div class="table-header">
-              <div class="col-index">序号</div>
-              <div class="col-client-wide">Client1</div>
-              <div class="col-client-wide">Client2</div>
-              <div class="col-correction">纠错状态</div>
-              <div class="col-final">最终编码</div>
-            </div>
-            <div class="table-body">
-              <div v-for="(item, index) in getDisplayData()" :key="index" class="table-row">
-                <div class="col-index">{{ item.index }}</div>
-
-                <!-- Client1 信息 -->
-                <div class="col-client-wide">
-                  <div v-if="item.client1" class="client-info">
-                    <div class="level">级别: {{ item.client1.level || '未知' }}</div>
-                    <div class="delay">时延: {{ item.client1.delay_ms || 0 }}ms</div>
-                    <div class="hash-info">哈希: <span class="hash-value">{{ item.client1.hash || '未知' }}</span></div>
-                    <div class="gray-code">格雷码: {{ item.client1.gray_code || '未知' }}</div>
-                  </div>
-                </div>
-
-                <!-- Client2 信息 -->
-                <div class="col-client-wide">
-                  <div v-if="item.client2" class="client-info">
-                    <div class="level">级别: {{ item.client2.level || '未知' }}</div>
-                    <div class="delay">时延: {{ item.client2.delay_ms || 0 }}ms</div>
-                    <div class="hash-info">哈希: <span class="hash-value">{{ item.client2.hash || '未知' }}</span></div>
-                    <div class="gray-code original">原始: {{ item.client2.gray_code || '未知' }}</div>
-                    <div v-if="item.client2.needs_correction" class="gray-code corrected">
-                      纠错: {{ item.client2.corrected_code || '未知' }}
-                    </div>
-                  </div>
-                </div>
-
-                <!-- 纠错状态 -->
-                <div class="col-correction">
-                  <div class="correction-status">
-                    <div class="hash-match" :class="{ 'match': item.hash_match, 'mismatch': !item.hash_match }">
-                      <i :class="item.hash_match ? 'el-icon-success' : 'el-icon-warning'" />
-                      {{ item.hash_match ? '哈希匹配' : '哈希不匹配' }}
-                    </div>
-                    <div class="correction-needed" :class="{ 'needed': item.client2 && item.client2.needs_correction, 'no-need': !item.client2 || !item.client2.needs_correction }">
-                      <i :class="(item.client2 && item.client2.needs_correction) ? 'el-icon-edit' : 'el-icon-check'" />
-                      {{ (item.client2 && item.client2.needs_correction) ? '需要纠错' : '无需纠错' }}
-                    </div>
-                  </div>
-                </div>
-
-                <!-- 最终编码 -->
-                <div class="col-final">
-                  <div class="final-code">
-                    <div class="code-title">最终编码:</div>
-                    <div class="code-value">{{ item.final_code || '未知' }}</div>
-                  </div>
-                </div>
-              </div>
+        <el-card shadow="hover" class="topn-card">
+          <div slot="header" class="card-header">
+            <span>TOP N 通信对波形</span>
+            <div class="topn-controls">
+              <el-switch v-model="autoRefresh" active-text="自动刷新" />
+              <el-tag type="info" size="mini">{{ selectedPairLabel }}</el-tag>
             </div>
           </div>
-        </div>
-
-        <!-- 最终密钥展示 -->
-        <div v-if="keyResult.final_key" class="final-key-block">
-          <h4>生成的最终密钥：</h4>
-          <div class="key-display">
-            <div class="key-info">
-              <div class="key-param">
-                <span class="key-label">适用算法:</span>
-                <span class="key-value">{{ keyResult.final_key.algorithm || '未知' }}</span>
+          <div class="topn-layout">
+            <el-table
+              ref="topnTable"
+              :data="displayCommunications"
+              border
+              height="320"
+              highlight-current-row
+              class="topn-table"
+              @current-change="handlePairSelect"
+            >
+              <el-table-column label="源地址" min-width="170">
+                <template slot-scope="scope">
+                  <span>{{ scope.row.source }}</span>
+                  <span class="port">:{{ scope.row.sourcePort }}</span>
+                </template>
+              </el-table-column>
+              <el-table-column label="目标地址" min-width="170">
+                <template slot-scope="scope">
+                  <span>{{ scope.row.target }}</span>
+                  <span class="port">:{{ scope.row.targetPort }}</span>
+                </template>
+              </el-table-column>
+              <el-table-column prop="protocol" label="协议" width="100">
+                <template slot-scope="scope">
+                  <el-tag :type="protocolTag(scope.row.protocol)" size="mini">{{ scope.row.protocol }}</el-tag>
+                </template>
+              </el-table-column>
+              <el-table-column prop="pps" label="包率 (pps)" width="140" />
+              <el-table-column prop="bandwidth" label="带宽 (Mbps)" width="160" />
+              <el-table-column prop="deviation" label="偏离基线" width="120">
+                <template slot-scope="scope">
+                  <span :class="['trend', scope.row.deviation >= 0 ? 'up' : 'down']">
+                    {{ scope.row.deviation >= 0 ? '+' : '' }}{{ scope.row.deviation }}%
+                  </span>
+                </template>
+              </el-table-column>
+              <el-table-column prop="lastSeen" label="最近观测" min-width="180">
+                <template slot-scope="scope">
+                  <span class="last-seen">{{ scope.row.lastSeen }}</span>
+                </template>
+              </el-table-column>
+            </el-table>
+            <div class="pair-chart">
+              <div class="pair-chart-title">
+                <span>通信对流量波形</span>
+                <el-tag v-if="selectedCommunication" type="success" size="mini">{{ pairChartSubtitle }}</el-tag>
+                <el-tag v-else type="info" size="mini">选择通信对以查看</el-tag>
               </div>
-              <div class="key-param">
-                <span class="key-label">密钥长度:</span>
-                <span class="key-value">{{ keyResult.final_key.key_length_bits || 0 }} 位 ({{ keyResult.final_key.key_length_bytes || 0 }} 字节)</span>
-              </div>
-              <div class="key-param">
-                <span class="key-label">量化位数:</span>
-                <span class="key-value">{{ form.quantization.replace('bit', '位') }}</span>
-              </div>
+              <div ref="pairTrendChart" class="chart-area pair" />
             </div>
+          </div>
+        </el-card>
 
-            <div class="key-content">
-              <div class="key-full">
-                <span class="key-label">完整密钥 (十六进制):</span>
-                <el-input
-                  :value="keyResult.final_key.hex_key || ''"
-                  readonly
-                  class="key-input"
+        <el-row :gutter="16" class="analysis-row">
+          <el-col :xs="24" :md="12">
+            <el-card shadow="hover">
+              <div slot="header" class="card-header">
+                <span>时间序列分析</span>
+                <el-select v-model="analysisGranularity" size="mini" style="width: 120px">
+                  <el-option label="分钟" value="minute" />
+                  <el-option label="小时" value="hour" />
+                  <el-option label="天" value="day" />
+                </el-select>
+              </div>
+              <div ref="timeSeriesChart" class="chart-area" />
+            </el-card>
+          </el-col>
+          <el-col :xs="24" :md="12">
+            <el-card shadow="hover">
+              <div slot="header" class="card-header">
+                <span>超常规调用分析</span>
+                <el-tag type="danger" size="mini">偏离告警</el-tag>
+              </div>
+              <div ref="deviationChart" class="chart-area" />
+            </el-card>
+          </el-col>
+        </el-row>
+      </el-tab-pane>
+
+      <el-tab-pane label="异常检测" name="anomaly">
+        <el-row :gutter="16">
+          <el-col :xs="24" :md="14">
+            <el-card shadow="hover">
+              <div slot="header" class="card-header">
+                <span>异常流量模式</span>
+                <el-tag type="danger" size="mini">实时告警</el-tag>
+              </div>
+              <div ref="anomalyChart" class="chart-area" />
+            </el-card>
+          </el-col>
+          <el-col :xs="24" :md="10">
+            <el-card shadow="hover">
+              <div slot="header" class="card-header">
+                <span>策略响应</span>
+                <el-button type="text" size="mini">调整策略</el-button>
+              </div>
+              <el-timeline>
+                <el-timeline-item
+                  v-for="action in mitigationActions"
+                  :key="action.id"
+                  :timestamp="action.time"
+                  :type="action.type"
                 >
-                  <el-button slot="append" icon="el-icon-copy-document" @click="copyKey">复制</el-button>
-                </el-input>
-              </div>
-            </div>
+                  <div class="mitigation-item">
+                    <div class="mitigation-title">{{ action.title }}</div>
+                    <p class="mitigation-desc">{{ action.description }}</p>
+                  </div>
+                </el-timeline-item>
+              </el-timeline>
+            </el-card>
+          </el-col>
+        </el-row>
+        <el-card shadow="hover" class="table-card">
+          <div slot="header" class="card-header">
+            <span>异常事件清单</span>
+            <el-tag type="info" size="mini">近 24 小时</el-tag>
           </div>
-        </div>
-      </div>
-
-      <!-- 当keyResult为null时显示的内容 -->
-      <div v-else class="no-data">
-        <p>暂无数据显示</p>
-      </div>
-
-      <span slot="footer" class="dialog-footer">
-        <el-button @click="resultDialogVisible = false">关 闭</el-button>
-      </span>
-    </el-dialog>
+          <el-table :data="anomalyEvents" border height="260">
+            <el-table-column prop="time" label="时间" width="160" />
+            <el-table-column prop="type" label="类型" width="150">
+              <template slot-scope="scope">
+                <el-tag :type="scope.row.tag" size="mini">{{ scope.row.type }}</el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column prop="source" label="源" min-width="160" />
+            <el-table-column prop="description" label="描述" min-width="240" />
+            <el-table-column prop="status" label="状态" width="120">
+              <template slot-scope="scope">
+                <el-tag :type="scope.row.statusTag" size="mini">{{ scope.row.status }}</el-tag>
+              </template>
+            </el-table-column>
+          </el-table>
+        </el-card>
+      </el-tab-pane>
+    </el-tabs>
   </div>
 </template>
 
 <script>
-import axios from 'axios'
+import * as echarts from 'echarts'
 
 export default {
-  name: 'KeyRequestForm',
+  name: 'TrafficMonitor',
   data() {
+    const toTimestamp = timeString => new Date(timeString).getTime()
+    const pad = value => (value < 10 ? `0${value}` : `${value}`)
+    const formatDateTime = timestamp => {
+      const date = new Date(timestamp)
+      return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`
+    }
+    const computeBaseline = (bandwidth, deviation) =>
+      Number((bandwidth / (1 + deviation / 100)).toFixed(1))
+
     return {
-      submitting: false,
-      resultDialogVisible: false,
-      keyResult: null,
-      form: {
-        startDate: this.getCurrentDateTime(),
-        endDate: '',
-        duration: '1day',
-        algorithm: 'AES',
-        quantization: '10bit',
-        device: 'raspberry',
-        keyLength: '128',
-        description: ''
+      filters: {
+        timeRange: [],
+        ip: '',
+        port: '',
+        protocol: ''
+      },
+      activeTab: 'overview',
+      autoRefresh: true,
+      analysisGranularity: 'hour',
+      rawCommunications: [
+        {
+          id: 'pair-1',
+          source: '10.1.2.11',
+          sourcePort: 8443,
+          target: '172.16.0.21',
+          targetPort: 443,
+          protocol: 'HTTPS',
+          pps: 4210,
+          bandwidth: 86,
+          baseline: computeBaseline(86, 18),
+          ppsRatio: 4210 / 86,
+          deviation: 18,
+          window: [toTimestamp('2024-10-19T14:05:00'), toTimestamp('2024-10-19T14:50:00')],
+          lastSeen: formatDateTime(toTimestamp('2024-10-19T14:50:00')),
+          timeline: [
+            { time: '14:05', timestamp: toTimestamp('2024-10-19T14:05:00'), value: 62 },
+            { time: '14:10', timestamp: toTimestamp('2024-10-19T14:10:00'), value: 65 },
+            { time: '14:15', timestamp: toTimestamp('2024-10-19T14:15:00'), value: 69 },
+            { time: '14:20', timestamp: toTimestamp('2024-10-19T14:20:00'), value: 73 },
+            { time: '14:25', timestamp: toTimestamp('2024-10-19T14:25:00'), value: 80 },
+            { time: '14:30', timestamp: toTimestamp('2024-10-19T14:30:00'), value: 88 },
+            { time: '14:35', timestamp: toTimestamp('2024-10-19T14:35:00'), value: 92 },
+            { time: '14:40', timestamp: toTimestamp('2024-10-19T14:40:00'), value: 95 },
+            { time: '14:45', timestamp: toTimestamp('2024-10-19T14:45:00'), value: 91 },
+            { time: '14:50', timestamp: toTimestamp('2024-10-19T14:50:00'), value: 86 }
+          ]
+        },
+        {
+          id: 'pair-2',
+          source: '10.1.2.14',
+          sourcePort: 8080,
+          target: '172.16.0.34',
+          targetPort: 80,
+          protocol: 'HTTP',
+          pps: 3560,
+          bandwidth: 42,
+          baseline: computeBaseline(42, -6),
+          ppsRatio: 3560 / 42,
+          deviation: -6,
+          window: [toTimestamp('2024-10-19T14:05:00'), toTimestamp('2024-10-19T14:50:00')],
+          lastSeen: formatDateTime(toTimestamp('2024-10-19T14:50:00')),
+          timeline: [
+            { time: '14:05', timestamp: toTimestamp('2024-10-19T14:05:00'), value: 44 },
+            { time: '14:10', timestamp: toTimestamp('2024-10-19T14:10:00'), value: 45 },
+            { time: '14:15', timestamp: toTimestamp('2024-10-19T14:15:00'), value: 43 },
+            { time: '14:20', timestamp: toTimestamp('2024-10-19T14:20:00'), value: 40 },
+            { time: '14:25', timestamp: toTimestamp('2024-10-19T14:25:00'), value: 39 },
+            { time: '14:30', timestamp: toTimestamp('2024-10-19T14:30:00'), value: 37 },
+            { time: '14:35', timestamp: toTimestamp('2024-10-19T14:35:00'), value: 36 },
+            { time: '14:40', timestamp: toTimestamp('2024-10-19T14:40:00'), value: 34 },
+            { time: '14:45', timestamp: toTimestamp('2024-10-19T14:45:00'), value: 33 },
+            { time: '14:50', timestamp: toTimestamp('2024-10-19T14:50:00'), value: 32 }
+          ]
+        },
+        {
+          id: 'pair-3',
+          source: '10.1.3.20',
+          sourcePort: 1883,
+          target: '172.16.0.82',
+          targetPort: 3883,
+          protocol: 'MQTT',
+          pps: 2112,
+          bandwidth: 33,
+          baseline: computeBaseline(33, 12),
+          ppsRatio: 2112 / 33,
+          deviation: 12,
+          window: [toTimestamp('2024-10-19T14:05:00'), toTimestamp('2024-10-19T14:50:00')],
+          lastSeen: formatDateTime(toTimestamp('2024-10-19T14:50:00')),
+          timeline: [
+            { time: '14:05', timestamp: toTimestamp('2024-10-19T14:05:00'), value: 22 },
+            { time: '14:10', timestamp: toTimestamp('2024-10-19T14:10:00'), value: 25 },
+            { time: '14:15', timestamp: toTimestamp('2024-10-19T14:15:00'), value: 26 },
+            { time: '14:20', timestamp: toTimestamp('2024-10-19T14:20:00'), value: 28 },
+            { time: '14:25', timestamp: toTimestamp('2024-10-19T14:25:00'), value: 29 },
+            { time: '14:30', timestamp: toTimestamp('2024-10-19T14:30:00'), value: 31 },
+            { time: '14:35', timestamp: toTimestamp('2024-10-19T14:35:00'), value: 33 },
+            { time: '14:40', timestamp: toTimestamp('2024-10-19T14:40:00'), value: 36 },
+            { time: '14:45', timestamp: toTimestamp('2024-10-19T14:45:00'), value: 35 },
+            { time: '14:50', timestamp: toTimestamp('2024-10-19T14:50:00'), value: 34 }
+          ]
+        },
+        {
+          id: 'pair-4',
+          source: '10.2.1.51',
+          sourcePort: 2404,
+          target: '172.16.0.99',
+          targetPort: 2404,
+          protocol: 'IEC104',
+          pps: 1920,
+          bandwidth: 28,
+          baseline: computeBaseline(28, 5),
+          ppsRatio: 1920 / 28,
+          deviation: 5,
+          window: [toTimestamp('2024-10-19T14:05:00'), toTimestamp('2024-10-19T14:50:00')],
+          lastSeen: formatDateTime(toTimestamp('2024-10-19T14:50:00')),
+          timeline: [
+            { time: '14:05', timestamp: toTimestamp('2024-10-19T14:05:00'), value: 21 },
+            { time: '14:10', timestamp: toTimestamp('2024-10-19T14:10:00'), value: 22 },
+            { time: '14:15', timestamp: toTimestamp('2024-10-19T14:15:00'), value: 24 },
+            { time: '14:20', timestamp: toTimestamp('2024-10-19T14:20:00'), value: 26 },
+            { time: '14:25', timestamp: toTimestamp('2024-10-19T14:25:00'), value: 27 },
+            { time: '14:30', timestamp: toTimestamp('2024-10-19T14:30:00'), value: 28 },
+            { time: '14:35', timestamp: toTimestamp('2024-10-19T14:35:00'), value: 29 },
+            { time: '14:40', timestamp: toTimestamp('2024-10-19T14:40:00'), value: 28 },
+            { time: '14:45', timestamp: toTimestamp('2024-10-19T14:45:00'), value: 27 },
+            { time: '14:50', timestamp: toTimestamp('2024-10-19T14:50:00'), value: 26 }
+          ]
+        },
+        {
+          id: 'pair-5',
+          source: '10.2.5.18',
+          sourcePort: 502,
+          target: '172.16.0.45',
+          targetPort: 1502,
+          protocol: 'Modbus',
+          pps: 1422,
+          bandwidth: 21,
+          baseline: computeBaseline(21, -3),
+          ppsRatio: 1422 / 21,
+          deviation: -3,
+          window: [toTimestamp('2024-10-19T14:05:00'), toTimestamp('2024-10-19T14:50:00')],
+          lastSeen: formatDateTime(toTimestamp('2024-10-19T14:50:00')),
+          timeline: [
+            { time: '14:05', timestamp: toTimestamp('2024-10-19T14:05:00'), value: 23 },
+            { time: '14:10', timestamp: toTimestamp('2024-10-19T14:10:00'), value: 23 },
+            { time: '14:15', timestamp: toTimestamp('2024-10-19T14:15:00'), value: 22 },
+            { time: '14:20', timestamp: toTimestamp('2024-10-19T14:20:00'), value: 21 },
+            { time: '14:25', timestamp: toTimestamp('2024-10-19T14:25:00'), value: 20 },
+            { time: '14:30', timestamp: toTimestamp('2024-10-19T14:30:00'), value: 20 },
+            { time: '14:35', timestamp: toTimestamp('2024-10-19T14:35:00'), value: 19 },
+            { time: '14:40', timestamp: toTimestamp('2024-10-19T14:40:00'), value: 18 },
+            { time: '14:45', timestamp: toTimestamp('2024-10-19T14:45:00'), value: 18 },
+            { time: '14:50', timestamp: toTimestamp('2024-10-19T14:50:00'), value: 17 }
+          ]
+        }
+      ],
+      displayCommunications: [],
+      selectedCommunication: null,
+      autoRefreshTimer: null,
+      callDeviation: [
+        { name: '负荷预测 → 调度主站', baseline: 120, actual: 168 },
+        { name: '场站 AGC → AGC 集中器', baseline: 96, actual: 142 },
+        { name: '交易撮合 → 结算中台', baseline: 88, actual: 103 },
+        { name: '边缘监测 → 实时数据湖', baseline: 64, actual: 88 },
+        { name: '运维工单 → 安全域代理', baseline: 52, actual: 49 }
+      ],
+      anomalyEvents: [
+        { time: '2024-10-19 14:44', type: 'DDoS 攻击', tag: 'danger', source: '北部探针 #3', description: '检测到大量 SYN 洪水攻击，已启用丢弃策略', status: '已阻断', statusTag: 'success' },
+        { time: '2024-10-19 14:18', type: '端口扫描', tag: 'warning', source: '南部探针 #1', description: '内外网边界发现高频端口探测行为', status: '观察中', statusTag: 'warning' },
+        { time: '2024-10-19 13:57', type: '异常大流量', tag: 'info', source: '东部探针 #2', description: '归档服务上传数据超出阈值，已通知负责人', status: '待确认', statusTag: 'info' }
+      ],
+      mitigationActions: [
+        { id: 1, title: '触发自动限速策略', description: '对攻击源 10.1.2.254 启动 5 分钟带宽限制', time: '13:42', type: 'danger' },
+        { id: 2, title: '联动防火墙封禁', description: '推送 6 条封禁规则至边界防火墙', time: '13:44', type: 'warning' },
+        { id: 3, title: '通知服务负责人', description: '消息队列服务负责人已确认异常波动', time: '12:02', type: 'success' }
+      ],
+      charts: {
+        overview: null,
+        protocol: null,
+        pairTrend: null,
+        timeSeries: null,
+        deviation: null,
+        anomaly: null
       }
     }
   },
+  computed: {
+    protocolOptions: function() {
+      const options = Array.from(new Set(this.rawCommunications.map(item => item.protocol)))
+      return options.sort()
+    },
+    selectedPairLabel: function() {
+      if (!this.selectedCommunication) {
+        return '未选择通信对'
+      }
+      const pair = this.selectedCommunication
+      return `当前：${pair.source}:${pair.sourcePort} -> ${pair.target}:${pair.targetPort}`
+    },
+    pairChartSubtitle: function() {
+      if (!this.selectedCommunication) {
+        return ''
+      }
+      const pair = this.selectedCommunication
+      return `${pair.protocol} | ${pair.source}:${pair.sourcePort} -> ${pair.target}:${pair.targetPort}`
+    }
+  },
+  watch: {
+    analysisGranularity() {
+      this.updateTimeSeriesChart()
+    },
+    autoRefresh(value) {
+      if (value) {
+        this.startAutoRefresh()
+      } else {
+        this.stopAutoRefresh()
+      }
+    },
+    displayCommunications: {
+      handler() {
+        this.$nextTick(() => {
+          this.ensureSelection()
+          this.refreshCharts()
+        })
+      },
+      deep: true
+    }
+  },
   mounted() {
-    this.setEndDateByDuration('1day')
-    this.onAlgorithmChange(this.form.algorithm)
+    this.filterCommunications()
+    this.selectedCommunication = this.displayCommunications[0] || null
+    this.$nextTick(() => {
+      this.initCharts()
+      window.addEventListener('resize', this.handleResize)
+      this.ensureSelection()
+      if (this.autoRefresh) {
+        this.startAutoRefresh()
+      }
+    })
+  },
+  beforeDestroy() {
+    window.removeEventListener('resize', this.handleResize)
+    this.stopAutoRefresh()
+    this.disposeCharts()
   },
   methods: {
-    // 获取当前时间字符串
-    getCurrentDateTime() {
-      const now = new Date()
-      const year = now.getFullYear()
-      const month = String(now.getMonth() + 1).padStart(2, '0')
-      const day = String(now.getDate()).padStart(2, '0')
-      const hours = String(now.getHours()).padStart(2, '0')
-      const minutes = String(now.getMinutes()).padStart(2, '0')
-      const seconds = String(now.getSeconds()).padStart(2, '0')
-      return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`
+    initCharts() {
+      this.initOverviewChart()
+      this.initProtocolChart()
+      this.initPairTrendChart()
+      this.initTimeSeriesChart()
+      this.initDeviationChart()
+      this.initAnomalyChart()
     },
-
-    // 算法改变时的处理
-    onAlgorithmChange(algorithm) {
-      const defaultLengths = {
-        'AES': '128',
-        'DES': '64',
-        '3DES': '168'
-      }
-      this.form.keyLength = defaultLengths[algorithm] || '128'
+    initOverviewChart() {
+      if (!this.$refs.overviewChart) return
+      this.charts.overview = echarts.init(this.$refs.overviewChart)
+      this.updateOverviewChart()
     },
-
-    // 获取密钥长度选项
-    getKeyLengthOptions() {
-      const options = {
-        'AES': [
-          { label: '128位', value: '128' },
-          { label: '192位', value: '192' },
-          { label: '256位', value: '256' }
-        ],
-        'DES': [
-          { label: '64位', value: '64' }
-        ],
-        '3DES': [
-          { label: '112位', value: '112' },
-          { label: '168位', value: '168' }
-        ]
-      }
-      return options[this.form.algorithm] || options['AES']
-    },
-
-    // 根据时间范围设置结束时间
-    onDurationChange(duration) {
-      if (duration !== 'custom') {
-        this.setEndDateByDuration(duration)
-      }
-    },
-
-    setEndDateByDuration(duration) {
-      if (duration === 'custom') {
+    updateOverviewChart() {
+      if (!this.charts.overview) return
+      const aggregated = this.getAggregatedTimeline()
+      if (!aggregated.length) {
+        this.setChartEmptyState(this.charts.overview, '暂无流量数据')
         return
       }
-
-      const startDate = new Date(this.form.startDate)
-      const endDate = new Date(startDate)
-
-      switch (duration) {
-        case '1day':
-          endDate.setDate(startDate.getDate() + 1)
-          break
-        case '1week':
-          endDate.setDate(startDate.getDate() + 7)
-          break
-        case '1month':
-          endDate.setMonth(startDate.getMonth() + 1)
-          break
-      }
-
-      this.form.endDate = this.formatDateTime(endDate)
-    },
-
-    // 格式化日期时间
-    formatDateTime(date) {
-      const year = date.getFullYear()
-      const month = String(date.getMonth() + 1).padStart(2, '0')
-      const day = String(date.getDate()).padStart(2, '0')
-      const hours = String(date.getHours()).padStart(2, '0')
-      const minutes = String(date.getMinutes()).padStart(2, '0')
-      const seconds = String(date.getSeconds()).padStart(2, '0')
-      return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`
-    },
-
-    // 表单验证
-    validateForm() {
-      if (!this.form.startDate || !this.form.endDate) {
-        this.$message.error('请设置完整的作用时间')
-        return false
-      }
-
-      if (new Date(this.form.endDate) <= new Date(this.form.startDate)) {
-        this.$message.error('结束时间必须晚于开始时间')
-        return false
-      }
-
-      if (!this.form.algorithm) {
-        this.$message.error('请选择一种加密算法')
-        return false
-      }
-
-      return true
-    },
-
-    // 提交申请
-    async onSubmit() {
-      if (!this.validateForm()) {
-        return
-      }
-
-      this.submitting = true
-
-      const submitData = {
-        startTime: this.form.startDate,
-        endTime: this.form.endDate,
-        duration: this.form.duration,
-        algorithm: this.form.algorithm,
-        quantization: this.form.quantization,
-        targetDevice: this.form.device,
-        keyLength: this.form.keyLength,
-        description: this.form.description,
-        requestTime: this.getCurrentDateTime()
-      }
-
-      console.log('提交密钥申请:', submitData)
-
-      try {
-        const response = await axios.post('http://localhost:5000/api/generate-key', submitData)
-
-        if (response.data.success) {
-          this.keyResult = response.data.data
-          this.resultDialogVisible = true
-          this.$message.success('密钥生成成功！')
-
-          // 自动保存密钥信息到本地
-          this.saveKeyInfo()
-        } else {
-          this.$message.error(response.data.message || '密钥生成失败')
-        }
-      } catch (error) {
-        console.error('密钥生成错误:', error)
-
-        if (error.response && error.response.data) {
-          this.$message.error(error.response.data.message || '密钥生成失败')
-        } else {
-          this.$message.error('网络错误，请检查服务器连接')
-        }
-      } finally {
-        this.submitting = false
-      }
-    },
-
-    // 重置表单
-    onReset() {
-      this.form = {
-        startDate: this.getCurrentDateTime(),
-        endDate: '',
-        duration: '1day',
-        algorithm: 'AES',
-        quantization: '10bit',
-        device: 'raspberry',
-        keyLength: '128',
-        description: ''
-      }
-      this.setEndDateByDuration('1day')
-      this.$message.success('表单已重置')
-    },
-
-    // 获取展示数据 - 添加安全检查
-    getDisplayData() {
-      if (this.keyResult && this.keyResult.display_data && Array.isArray(this.keyResult.display_data)) {
-        return this.keyResult.display_data
-      }
-      return []
-    },
-
-    // 复制密钥到剪贴板
-    copyKey() {
-      if (this.keyResult && this.keyResult.final_key && this.keyResult.final_key.hex_key) {
-        navigator.clipboard.writeText(this.keyResult.final_key.hex_key).then(() => {
-          this.$message.success('密钥已复制到剪贴板')
-        }).catch(() => {
-          // 备用方案
-          const textArea = document.createElement('textarea')
-          textArea.value = this.keyResult.final_key.hex_key
-          document.body.appendChild(textArea)
-          textArea.select()
-          document.execCommand('copy')
-          document.body.removeChild(textArea)
-          this.$message.success('密钥已复制到剪贴板')
-        })
-      } else {
-        this.$message.warning('没有可复制的密钥')
-      }
-    },
-
-    // 保存密钥信息到本地
-    async saveKeyInfo() {
-      if (!this.keyResult || !this.keyResult.final_key) {
-        return
-      }
-
-      try {
-        const keyInfo = {
-          作用时间: {
-            开始时间: this.form.startDate,
-            结束时间: this.form.endDate
+      const categories = aggregated.map(item => item.label)
+      const totals = aggregated.map(item => Number(item.value.toFixed(2)))
+      this.charts.overview.clear()
+      this.charts.overview.setOption({
+        tooltip: { trigger: 'axis' },
+        grid: { top: 32, left: 32, right: 16, bottom: 32 },
+        xAxis: {
+          type: 'category',
+          data: categories,
+          boundaryGap: false,
+          axisLine: {
+            lineStyle: {
+              color: '#909399'
+            }
+          }
+        },
+        yAxis: {
+          type: 'value',
+          name: 'Mbps',
+          axisLine: {
+            lineStyle: {
+              color: '#909399'
+            }
           },
-          加密算法: this.form.algorithm,
-          量化位数: this.form.quantization.replace('bit', '位'),
-          密钥长度: `${this.keyResult.final_key.key_length_bits}位`,
-          密钥: this.keyResult.final_key.hex_key,
-          生成时间: this.keyResult.generation_time,
-          备注说明: this.form.description || '无'
-        }
-
-        const response = await axios.post('http://localhost:5000/api/save-key-info', {
-          keyInfo: keyInfo,
-          basePath: 'E:\\DelayKeyGeneration\\keysInfo'
-        })
-
-        if (response.data.success) {
-          console.log('密钥信息已自动保存到本地')
-        } else {
-          console.warn('密钥信息保存失败:', response.data.message)
-        }
-      } catch (error) {
-        console.error('保存密钥信息时出错:', error)
+          splitLine: {
+            lineStyle: {
+              type: 'dashed',
+              color: '#dcdfe6'
+            }
+          }
+        },
+        series: [
+          {
+            name: '聚合流量',
+            type: 'line',
+            smooth: true,
+            symbol: 'circle',
+            symbolSize: 6,
+            areaStyle: {
+              color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+                { offset: 0, color: 'rgba(64, 158, 255, 0.4)' },
+                { offset: 1, color: 'rgba(64, 158, 255, 0.05)' }
+              ])
+            },
+            lineStyle: { width: 2, color: '#409EFF' },
+            itemStyle: { color: '#409EFF' },
+            data: totals
+          }
+        ]
+      })
+    },
+    initProtocolChart() {
+      if (!this.$refs.protocolChart) return
+      this.charts.protocol = echarts.init(this.$refs.protocolChart)
+      this.updateProtocolChart()
+    },
+    updateProtocolChart() {
+      if (!this.charts.protocol) return
+      const totals = this.displayCommunications.reduce((map, item) => {
+        const current = map.get(item.protocol) || 0
+        map.set(item.protocol, current + item.bandwidth)
+        return map
+      }, new Map())
+      if (!totals.size) {
+        this.setChartEmptyState(this.charts.protocol, '暂无协议分布')
+        return
       }
+      const data = Array.from(totals.entries()).map(([name, value]) => ({
+        name,
+        value: Number(value.toFixed(1))
+      }))
+      this.charts.protocol.clear()
+      this.charts.protocol.setOption({
+        tooltip: { trigger: 'item' },
+        legend: {
+          bottom: 0,
+          textStyle: {
+            color: '#606266'
+          }
+        },
+        series: [
+          {
+            type: 'pie',
+            radius: ['35%', '65%'],
+            roseType: 'radius',
+            itemStyle: {
+              borderRadius: 6,
+              borderColor: '#fff',
+              borderWidth: 2
+            },
+            label: { formatter: '{b}: {d}%' },
+            data
+          }
+        ]
+      })
+    },
+    initPairTrendChart() {
+      if (!this.$refs.pairTrendChart) return
+      this.charts.pairTrend = echarts.init(this.$refs.pairTrendChart)
+      this.updatePairTrendChart()
+    },
+    updatePairTrendChart() {
+      if (!this.charts.pairTrend) return
+      if (!this.selectedCommunication || !this.selectedCommunication.timeline.length) {
+        this.setChartEmptyState(this.charts.pairTrend, '选择通信对以查看波形')
+        return
+      }
+      const categories = this.selectedCommunication.timeline.map(item => item.time)
+      const values = this.selectedCommunication.timeline.map(item => Number(item.value.toFixed(2)))
+      this.charts.pairTrend.clear()
+      this.charts.pairTrend.setOption({
+        tooltip: { trigger: 'axis' },
+        grid: { top: 24, left: 32, right: 16, bottom: 32 },
+        xAxis: {
+          type: 'category',
+          data: categories,
+          boundaryGap: false,
+          axisLine: {
+            lineStyle: {
+              color: '#909399'
+            }
+          }
+        },
+        yAxis: {
+          type: 'value',
+          name: 'Mbps',
+          axisLine: {
+            lineStyle: {
+              color: '#909399'
+            }
+          },
+          splitLine: {
+            lineStyle: {
+              type: 'dashed',
+              color: '#ebeef5'
+            }
+          }
+        },
+        series: [
+          {
+            name: '通信对流量',
+            type: 'line',
+            smooth: true,
+            symbol: 'circle',
+            symbolSize: 6,
+            lineStyle: { width: 2, color: '#67C23A' },
+            itemStyle: { color: '#67C23A' },
+            areaStyle: {
+              color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+                { offset: 0, color: 'rgba(103, 194, 58, 0.35)' },
+                { offset: 1, color: 'rgba(103, 194, 58, 0.05)' }
+              ])
+            },
+            data: values
+          }
+        ]
+      })
+    },
+    initTimeSeriesChart() {
+      if (!this.$refs.timeSeriesChart) return
+      this.charts.timeSeries = echarts.init(this.$refs.timeSeriesChart)
+      this.updateTimeSeriesChart()
+    },
+    updateTimeSeriesChart() {
+      if (!this.charts.timeSeries) return
+      const preset = this.computeTimeSeries(this.analysisGranularity)
+      if (!preset.categories.length) {
+        this.setChartEmptyState(this.charts.timeSeries, '暂无时间序列数据')
+        return
+      }
+      this.charts.timeSeries.clear()
+      this.charts.timeSeries.setOption({
+        tooltip: { trigger: 'axis' },
+        grid: { top: 32, left: 36, right: 16, bottom: 32 },
+        xAxis: {
+          type: 'category',
+          data: preset.categories,
+          axisLine: {
+            lineStyle: {
+              color: '#909399'
+            }
+          }
+        },
+        yAxis: {
+          type: 'value',
+          name: 'Mbps',
+          axisLine: {
+            lineStyle: {
+              color: '#909399'
+            }
+          },
+          splitLine: {
+            lineStyle: {
+              type: 'dashed',
+              color: '#ebeef5'
+            }
+          }
+        },
+        series: [
+          {
+            name: '区间流量',
+            type: 'line',
+            smooth: true,
+            symbol: 'circle',
+            itemStyle: { color: '#67C23A' },
+            lineStyle: { color: '#67C23A', width: 3 },
+            data: preset.values
+          }
+        ]
+      })
+    },
+    initDeviationChart() {
+      if (!this.$refs.deviationChart) return
+      this.charts.deviation = echarts.init(this.$refs.deviationChart)
+      const categories = this.callDeviation.map(item => item.name)
+      const baseline = this.callDeviation.map(item => item.baseline)
+      const actual = this.callDeviation.map(item => item.actual)
+      this.charts.deviation.setOption({
+        tooltip: {
+          trigger: 'axis',
+          axisPointer: {
+            type: 'shadow'
+          }
+        },
+        legend: { top: 0, data: ['基线', '实际'] },
+        grid: { top: 52, left: 160, right: 16, bottom: 24 },
+        xAxis: {
+          type: 'value',
+          name: 'Mbps',
+          axisLine: {
+            lineStyle: {
+              color: '#909399'
+            }
+          }
+        },
+        yAxis: {
+          type: 'category',
+          data: categories,
+          inverse: true,
+          axisLine: {
+            lineStyle: {
+              color: '#909399'
+            }
+          }
+        },
+        series: [
+          {
+            name: '基线',
+            type: 'bar',
+            barWidth: 14,
+            itemStyle: { color: '#B3C0D1' },
+            data: baseline
+          },
+          {
+            name: '实际',
+            type: 'bar',
+            barWidth: 14,
+            itemStyle: { color: '#F56C6C' },
+            data: actual,
+            markPoint: {
+              symbol: 'pin',
+              symbolSize: 38,
+              label: {
+                color: '#fff',
+                formatter: ({ value }) => `${value}`
+              },
+              data: this.callDeviation.reduce((points, item, index) => {
+                if (item.actual > item.baseline) {
+                  points.push({
+                    name: '偏离',
+                    value: `+${item.actual - item.baseline}`,
+                    yAxis: categories[index],
+                    xAxis: item.actual
+                  })
+                }
+                return points
+              }, [])
+            }
+          }
+        ]
+      })
+    },
+    initAnomalyChart() {
+      if (!this.$refs.anomalyChart) return
+      this.charts.anomaly = echarts.init(this.$refs.anomalyChart)
+      const categories = ['10:00', '11:00', '12:00', '13:00', '14:00']
+      this.charts.anomaly.setOption({
+        tooltip: { trigger: 'axis' },
+        grid: { top: 32, left: 36, right: 16, bottom: 32 },
+        legend: { top: 0 },
+        xAxis: {
+          type: 'category',
+          data: categories,
+          axisLine: {
+            lineStyle: {
+              color: '#909399'
+            }
+          }
+        },
+        yAxis: {
+          type: 'value',
+          name: '事件数',
+          axisLine: {
+            lineStyle: {
+              color: '#909399'
+            }
+          },
+          splitLine: {
+            lineStyle: {
+              type: 'dashed',
+              color: '#ebeef5'
+            }
+          }
+        },
+        series: [
+          {
+            name: 'DDoS',
+            type: 'line',
+            smooth: true,
+            data: [3, 5, 4, 6, 5],
+            itemStyle: { color: '#F56C6C' }
+          },
+          {
+            name: '端口扫描',
+            type: 'line',
+            smooth: true,
+            data: [2, 2, 3, 4, 3],
+            itemStyle: { color: '#E6A23C' }
+          },
+          {
+            name: '异常大流量',
+            type: 'line',
+            smooth: true,
+            data: [1, 2, 1, 3, 2],
+            itemStyle: { color: '#409EFF' }
+          }
+        ]
+      })
+    },
+    applyFilters() {
+      this.filterCommunications()
+      this.$message.success('筛选条件已应用')
+    },
+    resetFilters() {
+      this.filters = {
+        timeRange: [],
+        ip: '',
+        port: '',
+        protocol: ''
+      }
+      this.filterCommunications()
+      this.$message.info('筛选条件已重置')
+    },
+    protocolTag(protocol) {
+      switch (protocol) {
+        case 'HTTPS':
+          return 'success'
+        case 'HTTP':
+          return 'info'
+        case 'MQTT':
+          return 'warning'
+        case 'IEC104':
+          return 'danger'
+        default:
+          return 'default'
+      }
+    },
+    handlePairSelect(row) {
+      this.selectedCommunication = row || null
+      this.updatePairTrendChart()
+    },
+    handleResize() {
+      Object.keys(this.charts).forEach(key => {
+        if (this.charts[key]) {
+          this.charts[key].resize()
+        }
+      })
+    },
+    disposeCharts() {
+      Object.keys(this.charts).forEach(key => {
+        if (this.charts[key]) {
+          this.charts[key].dispose()
+          this.charts[key] = null
+        }
+      })
+    },
+    handleTabChange() {
+      this.$nextTick(() => {
+        this.handleResize()
+      })
+    },
+    filterCommunications() {
+      const { ip, port, protocol, timeRange } = this.filters
+      const [start, end] =
+        timeRange && timeRange.length === 2 ? timeRange.map(item => item.getTime()) : [null, null]
+      const ipKeyword = ip.trim()
+      const portKeyword = port.trim()
+      const filtered = this.rawCommunications.filter(item => {
+        const ipMatch =
+          !ipKeyword || item.source.includes(ipKeyword) || item.target.includes(ipKeyword)
+        const portMatch =
+          !portKeyword ||
+          item.sourcePort.toString() === portKeyword ||
+          item.targetPort.toString() === portKeyword
+        const protocolMatch = !protocol || item.protocol === protocol
+        const timeMatch =
+          !start || !end
+            ? true
+            : item.timeline.some(point => point.timestamp >= start && point.timestamp <= end)
+        return ipMatch && portMatch && protocolMatch && timeMatch
+      })
+      const sorted = filtered.slice().sort((a, b) => b.bandwidth - a.bandwidth)
+      this.displayCommunications = sorted.slice(0, 10)
+    },
+    ensureSelection() {
+      if (!this.$refs.topnTable) {
+        return
+      }
+      if (!this.displayCommunications.length) {
+        this.$refs.topnTable.setCurrentRow()
+        this.selectedCommunication = null
+        this.updatePairTrendChart()
+        return
+      }
+      const currentId = this.selectedCommunication ? this.selectedCommunication.id : null
+      const candidate = currentId
+        ? this.displayCommunications.find(item => item.id === currentId)
+        : null
+      this.selectedCommunication = candidate || this.displayCommunications[0]
+      this.$nextTick(() => {
+        if (this.$refs.topnTable) {
+          this.$refs.topnTable.setCurrentRow(this.selectedCommunication)
+        }
+        this.updatePairTrendChart()
+      })
+    },
+    refreshCharts() {
+      this.updateOverviewChart()
+      this.updateProtocolChart()
+      this.updatePairTrendChart()
+      this.updateTimeSeriesChart()
+    },
+    startAutoRefresh() {
+      this.stopAutoRefresh()
+      this.autoRefreshTimer = setInterval(() => {
+        this.simulateRealtimeUpdate()
+      }, 5000)
+    },
+    stopAutoRefresh() {
+      if (this.autoRefreshTimer) {
+        clearInterval(this.autoRefreshTimer)
+        this.autoRefreshTimer = null
+      }
+    },
+    simulateRealtimeUpdate() {
+      const step = 5 * 60 * 1000
+      this.rawCommunications.forEach(item => {
+        const lastPoint = item.timeline[item.timeline.length - 1]
+        const nextTimestamp = (lastPoint ? lastPoint.timestamp : Date.now()) + step
+        const drift = 0.92 + Math.random() * 0.18
+        const baseValue = lastPoint ? lastPoint.value : item.bandwidth
+        const nextValue = Math.max(5, Number((baseValue * drift).toFixed(1)))
+        item.timeline.push({
+          time: this.formatTime(nextTimestamp),
+          timestamp: nextTimestamp,
+          value: nextValue
+        })
+        if (item.timeline.length > 12) {
+          item.timeline.shift()
+        }
+        item.window = [item.timeline[0].timestamp, item.timeline[item.timeline.length - 1].timestamp]
+        item.bandwidth = nextValue
+        item.pps = Math.round(item.bandwidth * item.ppsRatio)
+        item.deviation = Number((((item.bandwidth - item.baseline) / item.baseline) * 100).toFixed(1))
+        item.lastSeen = this.formatDateTime(item.window[1])
+      })
+      this.filterCommunications()
+    },
+    getAggregatedTimeline() {
+      const buckets = new Map()
+      this.displayCommunications.forEach(item => {
+        item.timeline.forEach(point => {
+          const current = buckets.get(point.timestamp) || { timestamp: point.timestamp, label: point.time, value: 0 }
+          current.value += point.value
+          current.label = point.time
+          buckets.set(point.timestamp, current)
+        })
+      })
+      return Array.from(buckets.values()).sort((a, b) => a.timestamp - b.timestamp)
+    },
+    computeTimeSeries(granularity) {
+      const aggregated = this.getAggregatedTimeline()
+      if (!aggregated.length) {
+        return { categories: [], values: [] }
+      }
+      const buckets = new Map()
+      aggregated.forEach(item => {
+        const { key, label } = this.getTimeBucketKey(item.timestamp, granularity)
+        if (!buckets.has(key)) {
+          buckets.set(key, { label, value: 0 })
+        }
+        const record = buckets.get(key)
+        record.value += item.value
+      })
+      const sorted = Array.from(buckets.entries()).sort((a, b) => a[0] - b[0])
+      return {
+        categories: sorted.map(([, entry]) => entry.label),
+        values: sorted.map(([, entry]) => Number(entry.value.toFixed(2)))
+      }
+    },
+    getTimeBucketKey(timestamp, granularity) {
+      const date = new Date(timestamp)
+      if (granularity === 'minute') {
+        const key = new Date(
+          date.getFullYear(),
+          date.getMonth(),
+          date.getDate(),
+          date.getHours(),
+          date.getMinutes()
+        ).getTime()
+        return { key, label: this.formatTime(key) }
+      }
+      if (granularity === 'hour') {
+        const key = new Date(date.getFullYear(), date.getMonth(), date.getDate(), date.getHours()).getTime()
+        return { key, label: `${this.pad(date.getHours())}:00` }
+      }
+      const dayLabels = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
+      const day = date.getDay()
+      return { key: day, label: dayLabels[day] }
+    },
+    formatTime(timestamp) {
+      const date = new Date(timestamp)
+      return `${this.pad(date.getHours())}:${this.pad(date.getMinutes())}`
+    },
+    formatDateTime(timestamp) {
+      const date = new Date(timestamp)
+      return `${date.getFullYear()}-${this.pad(date.getMonth() + 1)}-${this.pad(date.getDate())} ${this.pad(date.getHours())}:${this.pad(date.getMinutes())}`
+    },
+    pad(value) {
+      return value < 10 ? `0${value}` : `${value}`
+    },
+    setChartEmptyState(chart, message) {
+      if (!chart) {
+        return
+      }
+      chart.clear()
+      chart.setOption({
+        title: {
+          text: message,
+          left: 'center',
+          top: 'middle',
+          textStyle: {
+            color: '#909399',
+            fontSize: 14,
+            fontWeight: 500
+          }
+        }
+      })
     }
   }
 }
 </script>
 
-<style scoped>
-.key-request-container {
-  padding: 24px;
-  background-color: #f5f7fa;
-  min-height: calc(100vh - 84px);
-}
-
-.request-form {
-  background: white;
-  border-radius: 12px;
-  padding: 32px;
-  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.08);
-}
-
-.config-section {
-  max-width: 900px;
-  margin: 0 auto;
-}
-
-.form-group {
-  margin-bottom: 24px;
-}
-
-.form-label {
-  display: block;
-  margin-bottom: 8px;
-  font-weight: 600;
-  color: #606266;
-  font-size: 14px;
-}
-
-.time-config {
-  display: grid;
-  grid-template-columns: 1fr 120px 1fr;
-  gap: 16px;
-  align-items: end;
-}
-
-.time-label {
-  display: block;
-  font-size: 12px;
-  color: #909399;
-  margin-bottom: 4px;
-}
-
-.algorithm-group {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 16px;
-}
-
-.algorithm-group .el-radio {
-  margin: 0;
-  padding: 8px 16px;
-  border: 1px solid #dcdfe6;
-  border-radius: 6px;
-  transition: all 0.3s;
-}
-
-.algorithm-group .el-radio.is-checked {
-  border-color: #409eff;
-  background-color: #ecf5ff;
-}
-
-
-
-.device-group {
-  display: flex;
-  gap: 16px;
-}
-
-.device-group .el-radio {
-  margin: 0;
-  padding: 12px 16px;
-  border: 1px solid #dcdfe6;
-  border-radius: 8px;
-  transition: all 0.3s;
-  flex: 1;
-  text-align: center;
-}
-
-.device-group .el-radio.is-checked {
-  border-color: #409eff;
-  background-color: #ecf5ff;
-}
-
-.device-group .el-radio i {
-  margin-right: 4px;
-  font-size: 16px;
-}
-
-.hint-text {
-  font-size: 13px;
-  color: #909399;
-  display: flex;
-  align-items: center;
-}
-
-.hint-text i {
-  margin-right: 4px;
-  color: #409eff;
-}
-
-.action-buttons {
-  margin-top: 32px;
-  text-align: center;
-  padding-top: 24px;
-  border-top: 1px solid #ebeef5;
-}
-
-.action-buttons .el-button {
-  min-width: 120px;
-  margin: 0 8px;
-}
-
-/* 对话框样式 */
-.result-info {
-  background-color: #f5f7fa;
+<style lang="scss" scoped>
+.traffic-monitor-page {
   padding: 16px;
-  border-radius: 8px;
-  margin-bottom: 20px;
+  background: #f5f7fa;
+  min-height: 100%;
 }
 
-.info-label {
-  font-weight: 600;
-  color: #606266;
+.control-bar {
+  margin-bottom: 16px;
+  border-radius: 12px;
+  .control-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    align-items: center;
+  }
 }
 
-.info-text {
-  color: #303133;
+.monitor-tabs ::v-deep .el-tabs__header {
+  margin-bottom: 16px;
 }
 
-/* 纠错统计样式 */
-.correction-stats {
-  background: #fff;
-  border: 1px solid #e4e7ed;
-  border-radius: 8px;
-  padding: 20px;
-  margin-bottom: 20px;
-}
-
-.correction-stats h4 {
-  margin: 0 0 16px 0;
-  font-size: 16px;
-  color: #303133;
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
   font-weight: 600;
 }
 
-.stats-grid {
-  display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  gap: 16px;
+.chart-area {
+  width: 100%;
+  height: 280px;
+  &.small {
+    height: 260px;
+  }
+  &.pair {
+    height: 320px;
+  }
 }
 
-.stat-item {
-  text-align: center;
-  padding: 12px;
-  background: #f8f9fa;
-  border-radius: 6px;
-}
-
-.stat-value {
-  font-size: 20px;
-  font-weight: bold;
-  color: #409eff;
-  margin-bottom: 4px;
-}
-
-.stat-label {
-  font-size: 12px;
-  color: #909399;
-}
-
-.stat-note {
-  font-size: 10px;
-  color: #909399;
-  margin-top: 2px;
-  line-height: 1.2;
-}
-
-.stats-explanation {
+.table-card {
   margin-top: 16px;
 }
 
-.stats-explanation p {
-  margin: 4px 0;
-  font-size: 13px;
-  line-height: 1.4;
+.topn-card {
+  margin-top: 16px;
+  border-radius: 12px;
 }
 
-.data-block {
-  margin-bottom: 20px;
-}
-
-.data-block h4 {
-  margin: 0 0 10px 0;
-  font-size: 16px;
-  color: #303133;
-  font-weight: 600;
-}
-
-/* 详细数据表格样式 */
-.detailed-data-table {
-  border: 1px solid #e4e7ed;
-  border-radius: 6px;
-  overflow: hidden;
-  background: white;
-}
-
-.table-header {
-  display: grid;
-  grid-template-columns: 60px 1fr 1fr 180px 150px;
-  background: #f5f7fa;
-  border-bottom: 1px solid #e4e7ed;
-  font-weight: 600;
-  color: #606266;
-}
-
-.table-header > div {
-  padding: 12px;
-  text-align: center;
-  border-right: 1px solid #e4e7ed;
-}
-
-.table-header > div:last-child {
-  border-right: none;
-}
-
-.table-body {
-  max-height: 600px;
-  overflow-y: auto;
-}
-
-.table-row {
-  display: grid;
-  grid-template-columns: 60px 1fr 1fr 180px 150px;
-  border-bottom: 1px solid #f0f0f0;
-  min-height: 120px;
-}
-
-.table-row:last-child {
-  border-bottom: none;
-}
-
-.table-row:hover {
-  background-color: #fafafa;
-}
-
-.col-index {
-  padding: 12px;
-  text-align: center;
-  font-weight: 600;
-  color: #409eff;
-  border-right: 1px solid #f0f0f0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.col-client-wide {
-  padding: 8px 12px;
-  border-right: 1px solid #f0f0f0;
-}
-
-.col-correction {
-  padding: 8px 12px;
-  border-right: 1px solid #f0f0f0;
-}
-
-.col-final {
-  padding: 8px 12px;
-  border-right: none;
-}
-
-.client-info {
-  font-size: 12px;
-}
-
-.client-info .level {
-  color: #409eff;
-  font-weight: 600;
-  margin-bottom: 4px;
-}
-
-.client-info .delay {
-  color: #606266;
-  margin-bottom: 4px;
-}
-
-.client-info .hash-info {
-  color: #909399;
-  margin-bottom: 4px;
-  font-size: 11px;
-}
-
-.hash-value {
-  font-family: 'Courier New', monospace;
-  background: #f0f0f0;
-  padding: 1px 4px;
-  border-radius: 2px;
-}
-
-.client-info .gray-code {
-  font-family: 'Courier New', monospace;
-  padding: 2px 6px;
-  border-radius: 4px;
-  font-size: 11px;
-  margin-bottom: 2px;
-}
-
-.gray-code.original {
-  color: #e6a23c;
-  background: #fdf6ec;
-}
-
-.gray-code.corrected {
-  color: #67c23a;
-  background: #f0f9ff;
-}
-
-.correction-status {
-  font-size: 12px;
-}
-
-.hash-match, .correction-needed {
-  margin-bottom: 6px;
-  padding: 2px 6px;
-  border-radius: 4px;
-  display: flex;
-  align-items: center;
-}
-
-.hash-match.match {
-  color: #67c23a;
-  background: #f0f9ff;
-}
-
-.hash-match.mismatch {
-  color: #f56c6c;
-  background: #fef0f0;
-}
-
-.correction-needed.needed {
-  color: #e6a23c;
-  background: #fdf6ec;
-}
-
-.correction-needed.no-need {
-  color: #67c23a;
-  background: #f0f9ff;
-}
-
-.correction-needed i, .hash-match i {
-  margin-right: 2px;
-  font-size: 10px;
-}
-
-/* 最终编码列样式 */
-.final-code {
-  font-size: 12px;
-}
-
-.final-code .code-title {
-  color: #67c23a;
-  font-weight: 600;
-  margin-bottom: 4px;
-}
-
-.final-code .code-value {
-  font-family: 'Courier New', monospace;
-  color: #303133;
-  background: #f0f9ff;
-  padding: 4px 6px;
-  border-radius: 4px;
-  font-size: 11px;
-  word-break: break-all;
-  line-height: 1.3;
-}
-
-/* 最终密钥区块样式 */
-.final-key-block {
-  background: #fff;
-  border: 1px solid #e4e7ed;
-  border-radius: 8px;
-  padding: 20px;
-  margin: 20px 0;
-  border-left: 4px solid #67c23a;
-}
-
-.final-key-block h4 {
-  margin: 0 0 16px 0;
-  font-size: 16px;
-  color: #303133;
-  font-weight: 600;
-  border-bottom: 2px solid #67c23a;
-  padding-bottom: 8px;
-}
-
-.key-display {
-  background: #f0f9ff;
-  border-radius: 6px;
-  padding: 16px;
-}
-
-.key-info {
-  display: flex;
-  gap: 24px;
-  margin-bottom: 16px;
-  padding-bottom: 12px;
-  border-bottom: 1px solid #e1f5fe;
-  flex-wrap: wrap;
-}
-
-.key-param {
+.topn-controls {
   display: flex;
   align-items: center;
   gap: 8px;
 }
 
-.key-label {
-  font-size: 13px;
-  color: #606266;
-  font-weight: 500;
-}
-
-.key-value {
-  font-size: 13px;
-  color: #303133;
-  font-weight: 600;
-}
-
-.key-content {
-  space-y: 12px;
-}
-
-.key-full {
+.topn-layout {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 16px;
 }
 
-.key-input {
-  font-family: 'Courier New', monospace;
+.topn-table {
+  flex: 1 1 100%;
 }
 
-.key-input .el-input__inner {
-  font-family: inherit;
+.pair-chart {
+  flex: 1 1 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.pair-chart-title {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-weight: 600;
+}
+
+.analysis-row {
+  margin-top: 16px;
+}
+
+.trend {
+  font-weight: 600;
+  &.up {
+    color: #f56c6c;
+  }
+  &.down {
+    color: #67c23a;
+  }
+}
+
+.port {
+  margin-left: 4px;
+  color: #409eff;
+  font-weight: 600;
+}
+
+.last-seen {
   font-size: 13px;
-  color: #303133;
-  background: white;
-  border: 2px solid #67c23a;
+  color: #606266;
 }
 
-.key-input .el-input-group__append {
-  background: #67c23a;
-  border-color: #67c23a;
-}
-
-.key-input .el-input-group__append .el-button {
-  background: transparent;
-  border: none;
-  color: white;
-}
-
-.key-input .el-input-group__append .el-button:hover {
-  background: #20a0ff;
-}
-
-/* 对话框底部按钮 */
-.dialog-footer .el-button {
-  margin-left: 8px;
-}
-
-/* 响应式设计 */
-@media (max-width: 1200px) {
-  .time-config {
-    grid-template-columns: 1fr;
-    gap: 12px;
+.mitigation-item {
+  .mitigation-title {
+    font-weight: 600;
+    margin-bottom: 4px;
   }
-
-  .table-header,
-  .table-row {
-    grid-template-columns: 50px 1fr 1fr 140px 120px;
-  }
-
-  .key-info {
-    flex-direction: column;
-    gap: 8px;
+  .mitigation-desc {
+    font-size: 13px;
+    color: #606266;
+    margin: 0;
   }
 }
 
-@media (max-width: 768px) {
-  .key-request-container {
-    padding: 16px;
+@media (max-width: 1024px) {
+  .chart-area {
+    height: 240px;
   }
-
-  .request-form {
-    padding: 20px;
-  }
-
-  .table-header,
-  .table-row {
-    grid-template-columns: 1fr;
-    grid-template-rows: auto auto auto auto auto;
+  .chart-area.pair {
+    height: 260px;
   }
 }
 
-/* 滚动条样式 */
-.table-body::-webkit-scrollbar {
-  width: 6px;
-}
-
-.table-body::-webkit-scrollbar-track {
-  background: #f5f7fa;
-  border-radius: 3px;
-}
-
-.table-body::-webkit-scrollbar-thumb {
-  background: #c0c4cc;
-  border-radius: 3px;
-}
-
-.table-body::-webkit-scrollbar-thumb:hover {
-  background: #a6a9ad;
+@media (min-width: 1025px) {
+  .topn-layout {
+    flex-direction: row;
+  }
+  .topn-table {
+    flex: 1 1 54%;
+  }
+  .pair-chart {
+    flex: 1 1 46%;
+  }
 }
 </style>
