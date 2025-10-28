@@ -380,6 +380,7 @@ export default {
         deviation: null,
         anomaly: null
       }
+      return `${this.selectedCommunication.protocol} | ${this.selectedCommunication.source} → ${this.selectedCommunication.target}`
     }
   },
   computed: {
@@ -970,6 +971,21 @@ export default {
         categories: sorted.map(([, entry]) => entry.label),
         values: sorted.map(([, entry]) => Number(entry.value.toFixed(2)))
       }
+      const buckets = new Map()
+      aggregated.forEach(item => {
+        const { key, label } = this.getTimeBucketKey(item.timestamp, granularity)
+        if (!buckets.has(key)) {
+          buckets.set(key, { label, value: 0 })
+        }
+        const record = buckets.get(key)
+        record.value += item.value
+      })
+      const sorted = Array.from(buckets.entries()).sort((a, b) => a[0] - b[0])
+      return {
+        categories: sorted.map(([, entry]) => entry.label),
+        values: sorted.map(([, entry]) => Number(entry.value.toFixed(2)))
+      }
+      this.$message.info('筛选条件已重置')
     },
     getTimeBucketKey(timestamp, granularity) {
       const date = new Date(timestamp)
