@@ -1,517 +1,506 @@
 <template>
-  <div class="app-container">
-    <div class="filter-container">
-      <el-button class="filter-item" type="primary" icon="el-icon-refresh" @click="fetchData">
-        刷新数据
-      </el-button>
-      <el-button class="filter-item" type="success" icon="el-icon-folder-opened" @click="openKeyDirectory">
-        密钥目录
-      </el-button>
+  <div class="sensitive-data-page">
+    <el-row :gutter="16" class="stat-row">
+      <el-col v-for="card in statCards" :key="card.title" :xs="12" :sm="6" :md="6" :lg="6">
+        <el-card shadow="hover" class="stat-card">
+          <div class="stat-header">
+            <span>{{ card.title }}</span>
+            <el-tag :type="card.tagType" size="mini">{{ card.tag }}</el-tag>
+          </div>
+          <div class="stat-value">{{ card.value }}</div>
+          <div class="stat-subtitle">{{ card.subtitle }}</div>
+        </el-card>
+      </el-col>
+    </el-row>
+
+    <el-card shadow="hover" class="filter-card">
+      <div class="filter-group">
+        <el-input v-model="filters.keyword" placeholder="搜索敏感字段 / 来源" clearable prefix-icon="el-icon-search" />
+        <el-select v-model="filters.risk" placeholder="风险等级" clearable style="width: 160px">
+          <el-option label="全部" value="all" />
+          <el-option label="高危" value="L4" />
+          <el-option label="中危" value="L3" />
+          <el-option label="低危" value="L2" />
+          <el-option label="提示" value="L1" />
+        </el-select>
+        <el-switch v-model="filters.onlyExceed" active-text="仅显示超权限" />
+        <el-button type="primary" icon="el-icon-refresh" @click="refreshData">刷新数据</el-button>
+      </div>
+    </el-card>
+
+    <div class="data-layout">
+      <aside class="classification-panel">
+        <el-card shadow="hover" class="tree-card">
+          <div slot="header" class="card-header">
+            <span>数据分类</span>
+          </div>
+          <el-tree
+            :data="classificationTree"
+            :default-expand-all="true"
+            highlight-current
+            node-key="id"
+            @node-click="handleTreeClick"
+          />
+        </el-card>
+      </aside>
+
+      <section class="table-section">
+        <el-card shadow="hover" class="table-card">
+          <div slot="header" class="card-header">
+            <span>敏感数据列表</span>
+            <el-button type="text" size="mini" icon="el-icon-download">导出报表</el-button>
+          </div>
+          <el-table
+            :data="filteredTableData"
+            border
+            highlight-current-row
+            height="420"
+            @current-change="handleRowSelect"
+          >
+            <el-table-column type="index" width="60" label="#" />
+            <el-table-column prop="name" label="字段名称" min-width="160" />
+            <el-table-column prop="category" label="数据类型" width="140" />
+            <el-table-column prop="sensitivity" label="敏感等级" width="120">
+              <template slot-scope="scope">
+                <el-tag :type="sensitivityTag(scope.row.sensitivity)" size="mini">{{ scope.row.sensitivity }}</el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column prop="sourcePort" label="来源端口" width="140" />
+            <el-table-column prop="requestPath" label="请求路径" min-width="200" show-overflow-tooltip />
+            <el-table-column prop="srcIp" label="源 IP" width="150" />
+            <el-table-column prop="dstIp" label="目的 IP" width="150" />
+            <el-table-column prop="permission" label="权限校验" width="140">
+              <template slot-scope="scope">
+                <el-tag :type="scope.row.permission === '越权访问' ? 'danger' : 'success'" size="mini">{{ scope.row.permission }}</el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column prop="lastSeen" label="最近检测" width="170" />
+          </el-table>
+        </el-card>
+      </section>
+
+      <aside class="detail-panel">
+        <el-card shadow="hover" class="detail-card">
+          <div slot="header" class="card-header">
+            <span>详细信息</span>
+          </div>
+          <div v-if="selectedRecord" class="detail-content">
+            <h3 class="detail-title">{{ selectedRecord.name }}</h3>
+            <div class="detail-tags">
+              <el-tag :type="sensitivityTag(selectedRecord.sensitivity)" effect="dark" size="mini">{{ selectedRecord.sensitivity }}</el-tag>
+              <el-tag :type="selectedRecord.permission === '越权访问' ? 'danger' : 'success'" size="mini">{{ selectedRecord.permission }}</el-tag>
+            </div>
+            <el-descriptions :column="1" border size="small">
+              <el-descriptions-item label="数据类型">{{ selectedRecord.category }}</el-descriptions-item>
+              <el-descriptions-item label="来源服务">{{ selectedRecord.service }}</el-descriptions-item>
+              <el-descriptions-item label="来源端口">{{ selectedRecord.sourcePort }}</el-descriptions-item>
+              <el-descriptions-item label="请求路径">{{ selectedRecord.requestPath }}</el-descriptions-item>
+              <el-descriptions-item label="源 → 目的 IP">{{ `${selectedRecord.srcIp} → ${selectedRecord.dstIp}` }}</el-descriptions-item>
+              <el-descriptions-item label="检测时间">{{ selectedRecord.lastSeen }}</el-descriptions-item>
+              <el-descriptions-item label="风险评估">{{ selectedRecord.riskNote }}</el-descriptions-item>
+              <el-descriptions-item label="传输路径">{{ selectedRecord.path.join(' → ') }}</el-descriptions-item>
+            </el-descriptions>
+          </div>
+          <div v-else class="detail-placeholder">
+            <el-empty description="选择一条记录查看详情" />
+          </div>
+        </el-card>
+      </aside>
     </div>
 
-    <el-table
-      v-loading="listLoading"
-      :data="list"
-      element-loading-text="加载中..."
-      border
-      fit
-      highlight-current-row
-    >
-      <el-table-column align="center" label="ID" width="80">
-        <template v-slot="scope">
-          {{ scope.$index + 1 }}
-        </template>
-      </el-table-column>
-      <el-table-column label="密钥文件名" width="280">
-        <template v-slot="scope">
-          <span class="link-type" @click="viewDetails(scope.row)">{{ scope.row.filename }}</span>
-        </template>
-      </el-table-column>
-      <el-table-column label="适用加密算法" width="120" align="center">
-        <template v-slot="scope">
-          <el-tag :type="scope.row.algorithm | keyTypeFilter">
-            {{ scope.row.algorithm }}
-          </el-tag>
-        </template>
-      </el-table-column>
-      <el-table-column label="密钥长度" width="100" align="center">
-        <template v-slot="scope">
-          {{ scope.row.key_length }}
-        </template>
-      </el-table-column>
-      <el-table-column label="量化位数" width="100" align="center">
-        <template v-slot="scope">
-          <el-tag type="info" size="small">{{ scope.row.quantization }}</el-tag>
-        </template>
-      </el-table-column>
-      <el-table-column label="生成时间" width="180" align="center">
-        <template v-slot="scope">
-          <i class="el-icon-time" />
-          <span>{{ scope.row.generation_time }}</span>
-        </template>
-      </el-table-column>
-      <el-table-column label="结束时间" width="180" align="center">
-        <template v-slot="scope">
-          <i class="el-icon-clock" />
-          <span>{{ scope.row.end_time }}</span>
-        </template>
-      </el-table-column>
-      <el-table-column label="状态" width="100" align="center">
-        <template v-slot="scope">
-          <el-tag :type="getStatusType(scope.row.end_time)">
-            {{ getStatusText(scope.row.end_time) }}
-          </el-tag>
-        </template>
-      </el-table-column>
-      <el-table-column label="备注说明" width="150">
-        <template v-slot="scope">
-          <span>{{ scope.row.description || '无' }}</span>
-        </template>
-      </el-table-column>
-      <el-table-column label="操作" width="260" align="center">
-        <template v-slot="scope">
-          <el-button
-            size="mini"
-            type="success"
-            @click="copyKey(scope.row)"
-          >
-            复制密钥
-          </el-button>
-          <el-button
-            size="mini"
-            type="danger"
-            @click="deleteKey(scope.row)"
-          >
-            删除
-          </el-button>
-        </template>
-      </el-table-column>
-    </el-table>
-
-    <!-- 详情对话框 -->
-    <el-dialog
-      title="密钥详情"
-      :visible.sync="detailDialogVisible"
-      width="60%"
-    >
-      <div v-if="selectedKey">
-        <el-descriptions title="基本信息" :column="2" border>
-          <el-descriptions-item label="文件名">{{ selectedKey.filename }}</el-descriptions-item>
-          <el-descriptions-item label="加密算法">{{ selectedKey.keyInfo.加密算法 }}</el-descriptions-item>
-          <el-descriptions-item label="密钥长度">{{ selectedKey.keyInfo.密钥长度 }}</el-descriptions-item>
-          <el-descriptions-item label="量化位数">{{ selectedKey.keyInfo.量化位数 }}</el-descriptions-item>
-          <el-descriptions-item label="生成时间">{{ selectedKey.keyInfo.生成时间 }}</el-descriptions-item>
-          <el-descriptions-item label="状态">
-            <el-tag :type="getStatusType(selectedKey.keyInfo.作用时间.结束时间)">
-              {{ getStatusText(selectedKey.keyInfo.作用时间.结束时间) }}
-            </el-tag>
-          </el-descriptions-item>
-        </el-descriptions>
-
-        <el-divider content-position="left">作用时间</el-divider>
-        <el-descriptions :column="2" border>
-          <el-descriptions-item label="开始时间">
-            <el-tag type="success">{{ selectedKey.keyInfo.作用时间.开始时间 }}</el-tag>
-          </el-descriptions-item>
-          <el-descriptions-item label="结束时间">
-            <el-tag type="warning">{{ selectedKey.keyInfo.作用时间.结束时间 }}</el-tag>
-          </el-descriptions-item>
-        </el-descriptions>
-
-        <el-divider content-position="left">密钥信息</el-divider>
-        <el-descriptions :column="1" border>
-          <el-descriptions-item label="完整密钥">
-            <div class="key-display">
-              <el-input
-                :value="selectedKey.keyInfo.密钥"
-                readonly
-                class="key-input"
-              >
-                <template v-slot:append>
-                  <el-button icon="el-icon-copy-document" @click="copyKeyValue(selectedKey.keyInfo.密钥)">
-                    复制
-                  </el-button>
-                </template>
-              </el-input>
-            </div>
-          </el-descriptions-item>
-          <el-descriptions-item label="备注说明">
-            {{ selectedKey.keyInfo.备注说明 || '无' }}
-          </el-descriptions-item>
-        </el-descriptions>
-
-        <el-divider content-position="left">文件信息</el-divider>
-        <el-descriptions :column="2" border>
-          <el-descriptions-item label="文件大小">{{ formatFileSize(selectedKey.size) }}</el-descriptions-item>
-          <el-descriptions-item label="保存时间">{{ selectedKey.saveTime }}</el-descriptions-item>
-          <el-descriptions-item label="文件路径" :span="2">{{ selectedKey.file_path }}</el-descriptions-item>
-        </el-descriptions>
+    <el-card shadow="hover" class="lineage-card">
+      <div slot="header" class="card-header">
+        <span>敏感数据血缘关系</span>
+        <el-tag type="info" size="mini">{{ lineageLabel }}</el-tag>
       </div>
-      <span slot="footer" class="dialog-footer">
-        <el-button @click="detailDialogVisible = false">关闭</el-button>
-        <el-button type="primary" @click="exportKeyInfo">导出密钥信息</el-button>
-        <el-button v-if="selectedKey" type="success" @click="copyKeyValue(selectedKey.keyInfo.密钥)">
-          复制密钥
-        </el-button>
-      </span>
-    </el-dialog>
+      <div ref="lineageChart" class="lineage-canvas" />
+    </el-card>
   </div>
 </template>
 
 <script>
-import axios from 'axios'
+import * as echarts from 'echarts'
 
 export default {
-  filters: {
-    keyTypeFilter(type) {
-      const typeMap = {
-        AES: 'success',
-        '3DES': 'warning',
-        DES: 'info'
-      }
-      return typeMap[type] || 'primary'
-    }
-  },
+  name: 'SensitiveData',
   data() {
     return {
-      list: [],
-      listLoading: true,
-      detailDialogVisible: false,
-      selectedKey: null
+      statCards: [
+        { title: '调度中台高敏字段', value: '328', subtitle: '今日新增 19 条策略标签', tag: '调度域', tagType: 'danger' },
+        { title: '运行监测关键指标', value: '152', subtitle: '覆盖 18 个站群', tag: '运行域', tagType: 'warning' },
+        { title: '业务中台策略字段', value: '94', subtitle: '三方接口调用 12 次', tag: '业务中台', tagType: 'info' },
+        { title: '交易结算敏感字段', value: '61', subtitle: '最新对账差异 1.8%', tag: '交易域', tagType: 'success' }
+      ],
+      filters: {
+        keyword: '',
+        risk: 'all',
+        onlyExceed: false
+      },
+      classificationTree: [
+        {
+          id: 1,
+          label: '调度控制中台',
+          children: [
+            { id: 11, label: '安全调度指令 (L4)' },
+            { id: 12, label: '潮流断面参数 (L3)' },
+            { id: 13, label: '应急切负荷脚本 (L4)' }
+          ]
+        },
+        {
+          id: 2,
+          label: '运行监测中台',
+          children: [
+            { id: 21, label: '实时遥信指标 (L2)' },
+            { id: 22, label: '遥测基线模型 (L3)' }
+          ]
+        },
+        {
+          id: 3,
+          label: '业务协同中台',
+          children: [
+            { id: 31, label: '跨域作业授权 (L3)' },
+            { id: 32, label: '保电事件档案 (L4)' }
+          ]
+        },
+        {
+          id: 4,
+          label: '交易结算中台',
+          children: [
+            { id: 41, label: '购售电合同 (L4)' },
+            { id: 42, label: '出清凭证 (L3)' }
+          ]
+        },
+        {
+          id: 5,
+          label: '安全支撑域',
+          children: [
+            { id: 51, label: '策略发布稿 (L3)' },
+            { id: 52, label: '加密密钥片段 (L4)' }
+          ]
+        }
+      ],
+      tableData: [
+        {
+          id: 1,
+          name: 'dispatch_master_plan',
+          category: '调度控制中台',
+          sensitivity: 'L4',
+          sourcePort: 'TCP:7010',
+          service: 'dispatch-strategy-center',
+          permission: '越权访问',
+          lastSeen: '2024-10-19 14:56',
+          riskNote: '边缘协调器尝试拉取主站调度方案，疑似越权同步。',
+          path: ['dispatch-strategy-center', 'integration-bus', 'edge-coordinator'],
+          srcIp: '10.20.18.45',
+          dstIp: '172.16.10.3',
+          requestPath: '/v1/strategy/master-plan/export'
+        },
+        {
+          id: 2,
+          name: 'grid_data_fabric_map',
+          category: '业务协同中台',
+          sensitivity: 'L3',
+          sourcePort: 'HTTPS:7443',
+          service: 'grid-data-fabric',
+          permission: '越权访问',
+          lastSeen: '2024-10-19 14:49',
+          riskNote: '业务中台同步电压档案映射到第三方工单平台，确认是否授权。',
+          path: ['grid-data-fabric', 'service-mesh', 'partner-ticketing'],
+          srcIp: '10.33.27.14',
+          dstIp: '172.16.35.210',
+          requestPath: '/sync/archives/voltage-map/export'
+        },
+        {
+          id: 3,
+          name: 'scada_limit_profile',
+          category: '运行监测中台',
+          sensitivity: 'L3',
+          sourcePort: 'TCP:6080',
+          service: 'scada-core',
+          permission: '受控访问',
+          lastSeen: '2024-10-19 14:42',
+          riskNote: '遥测阈值曲线按计划推送，处于受控白名单。',
+          path: ['scada-core', 'data-hub', 'analysis-engine'],
+          srcIp: '10.30.5.18',
+          dstIp: '172.16.21.9',
+          requestPath: '/telemetry/limit-profile/publish'
+        },
+        {
+          id: 4,
+          name: 'market_clearing_ticket',
+          category: '交易结算中台',
+          sensitivity: 'L4',
+          sourcePort: 'HTTPS:9443',
+          service: 'market-clearing-service',
+          permission: '越权访问',
+          lastSeen: '2024-10-19 14:34',
+          riskNote: '检测到边缘结算节点批量导出结算凭证，需核实操作来源。',
+          path: ['market-clearing-service', 'settlement-adapter', 'external-clearing-node'],
+          srcIp: '10.50.2.62',
+          dstIp: '172.16.40.27',
+          requestPath: '/settlement/v2/ticket/download'
+        },
+        {
+          id: 5,
+          name: 'grid_security_token',
+          category: '安全支撑域',
+          sensitivity: 'L4',
+          sourcePort: 'TCP:5520',
+          service: 'crypto-vault',
+          permission: '越权访问',
+          lastSeen: '2024-10-19 14:25',
+          riskNote: '授权存储库外出现密钥片段调用，请立即核查密钥分发链路。',
+          path: ['crypto-vault', 'secure-gateway', 'maintenance-console'],
+          srcIp: '10.10.2.5',
+          dstIp: '172.16.5.44',
+          requestPath: '/token/segment/fetch'
+        },
+        {
+          id: 6,
+          name: 'flexible_load_order',
+          category: '调度控制中台',
+          sensitivity: 'L2',
+          sourcePort: 'MQTT:1883',
+          service: 'demand-response-hub',
+          permission: '受控访问',
+          lastSeen: '2024-10-19 14:16',
+          riskNote: '柔性负荷调度令按策略分发，已验证边缘节点响应。',
+          path: ['demand-response-hub', 'event-bus', 'flex-load-agent'],
+          srcIp: '10.25.11.33',
+          dstIp: '172.16.18.56',
+          requestPath: '/orders/flex-load/dispatch'
+        }
+      ],
+      selectedRecord: null,
+      lineageChart: null
     }
   },
-  created() {
-    this.fetchData()
+  computed: {
+    filteredTableData() {
+      return this.tableData.filter(item => {
+        if (this.filters.keyword && !`${item.name}${item.category}${item.service}${item.requestPath}${item.srcIp}${item.dstIp}`.includes(this.filters.keyword)) return false
+        if (this.filters.risk && this.filters.risk !== 'all' && item.sensitivity !== this.filters.risk) return false
+        if (this.filters.onlyExceed && item.permission !== '越权访问') return false
+        return true
+      })
+    },
+    lineageLabel() {
+      return this.selectedRecord ? `${this.selectedRecord.name} 血缘追踪` : '请选择一条敏感数据记录'
+    }
+  },
+  mounted() {
+    this.$nextTick(() => {
+      this.initLineageChart()
+      if (this.tableData.length) {
+        this.handleRowSelect(this.tableData[0])
+      }
+    })
+  },
+  beforeDestroy() {
+    window.removeEventListener('resize', this.handleResize)
+    if (this.lineageChart) {
+      this.lineageChart.dispose()
+      this.lineageChart = null
+    }
   },
   methods: {
-    async fetchData() {
-      this.listLoading = true
-      try {
-        const response = await axios.get('http://localhost:5000/api/list-saved-keys')
-
-        if (response.data.success) {
-          // 转换数据格式以匹配表格显示
-          this.list = response.data.keys.map(key => ({
-            ...key,
-            // 从密钥信息中提取显示字段
-            algorithm: key.algorithm,
-            key_length: key.key_length,
-            quantization: '10bit', // 先设置默认值，后续从详细信息中获取
-            generation_time: key.generation_time,
-            creation_time: key.creation_time,
-            description: key.description,
-            // 需要从详细信息中获取结束时间，先设置为未知
-            end_time: '加载中...'
-          }))
-
-          // 异步获取每个密钥的详细信息以获取结束时间和量化位数
-          this.fetchDetailedInfo()
-
-          console.log('成功获取密钥历史:', this.list.length, '条记录')
-        } else {
-          this.$message.error(response.data.message || '获取密钥历史失败')
-          this.list = []
+    sensitivityTag(level) {
+      switch (level) {
+        case 'L4':
+          return 'danger'
+        case 'L3':
+          return 'warning'
+        case 'L2':
+          return 'info'
+        default:
+          return 'success'
+      }
+    },
+    refreshData() {
+      this.$message.success('敏感数据视图已刷新')
+    },
+    handleTreeClick(node) {
+      if (node.label) {
+        const label = node.label.split(' ')[0]
+        this.filters.keyword = label
+      }
+    },
+    handleRowSelect(row) {
+      this.selectedRecord = row || null
+      this.renderLineage()
+    },
+    initLineageChart() {
+      if (!this.$refs.lineageChart) return
+      this.lineageChart = echarts.init(this.$refs.lineageChart)
+      this.renderLineage()
+      window.addEventListener('resize', this.handleResize)
+    },
+    renderLineage() {
+      if (!this.lineageChart) return
+      const record = this.selectedRecord
+      const nodes = record
+        ? record.path.map((name, index) => ({
+          id: `${name}-${index}`,
+          name,
+          symbolSize: index === 0 ? 58 : index === record.path.length - 1 ? 52 : 46,
+          itemStyle: { color: index === record.path.length - 1 ? '#F56C6C' : '#409EFF' }
+        }))
+        : []
+      const links = []
+      if (record) {
+        for (let i = 0; i < record.path.length - 1; i++) {
+          links.push({
+            source: `${record.path[i]}-${i}`,
+            target: `${record.path[i + 1]}-${i + 1}`,
+            lineStyle: { color: i === record.path.length - 2 ? '#F56C6C' : '#67C23A', width: 2 }
+          })
         }
-      } catch (error) {
-        console.error('获取密钥历史失败:', error)
-        this.$message.error('网络错误，请检查服务器连接')
-        this.list = []
-      } finally {
-        this.listLoading = false
       }
-    },
-
-    deleteKey(row) {
-      this.$confirm(`确定要删除密钥文件 "${row.filename}" 吗？删除后将无法恢复。`, '警告', {
-        confirmButtonText: '确定删除',
-        cancelButtonText: '取消',
-        type: 'warning'
-      }).then(async() => {
-        try {
-          const response = await axios.delete(`http://localhost:5000/api/delete-key-info/${row.filename}`)
-
-          if (response.data.success) {
-            // 从列表中移除该项
-            const index = this.list.findIndex(item => item.filename === row.filename)
-            if (index > -1) {
-              this.list.splice(index, 1)
-            }
-
-            this.$message({
-              type: 'success',
-              message: '密钥文件已删除'
-            })
-          } else {
-            this.$message.error(response.data.message || '删除失败')
-          }
-        } catch (error) {
-          console.error('删除密钥文件失败:', error)
-          this.$message.error('删除失败，请检查网络连接')
-        }
-      }).catch(() => {
-        this.$message({
-          type: 'info',
-          message: '已取消删除'
-        })
-      })
-    },
-
-    extractQuantization(filename) {
-      // 从文件名中提取量化位数信息
-      const match = filename.match(/(\d+bit)/i)
-      return match ? match[1] : '10bit'
-    },
-
-    async fetchDetailedInfo() {
-      // 并行获取所有密钥的详细信息以获取结束时间和量化位数
-      try {
-        const promises = this.list.map(async(item) => {
-          try {
-            const response = await axios.get(`http://localhost:5000/api/get-key-info/${item.filename}`)
-            if (response.data.success) {
-              const keyInfo = response.data.data.密钥信息
-              return {
-                filename: item.filename,
-                endTime: keyInfo.作用时间.结束时间,
-                quantization: keyInfo.量化位数 || '10bit'
-              }
-            }
-          } catch (error) {
-            console.warn(`获取 ${item.filename} 的详细信息失败:`, error)
-            return null
-          }
-        })
-
-        const results = await Promise.all(promises)
-
-        // 更新列表中的結束时间和量化位数
-        results.forEach(result => {
-          if (result) {
-            const item = this.list.find(item => item.filename === result.filename)
-            if (item) {
-              item.end_time = result.endTime
-              item.quantization = result.quantization
-            }
-          }
-        })
-
-        // 设置未获取到的项目为默认值
-        this.list.forEach(item => {
-          if (item.end_time === '加载中...') {
-            item.end_time = '未知'
-          }
-          if (!item.quantization || item.quantization === '加载中...') {
-            item.quantization = '10bit'
-          }
-        })
-      } catch (error) {
-        console.error('批量获取详细信息失败:', error)
-      }
-    },
-
-    getStatusType(endTime) {
-      if (!endTime || endTime === '未知' || endTime === '加载中...') {
-        return 'info'
-      }
-
-      try {
-        const endDate = new Date(endTime)
-        const currentDate = new Date()
-        return currentDate <= endDate ? 'success' : 'danger'
-      } catch (error) {
-        return 'info'
-      }
-    },
-
-    getStatusText(endTime) {
-      if (!endTime || endTime === '未知' || endTime === '加载中...') {
-        return '未知'
-      }
-
-      try {
-        const endDate = new Date(endTime)
-        const currentDate = new Date()
-        return currentDate <= endDate ? '未过期' : '已过期'
-      } catch (error) {
-        return '未知'
-      }
-    },
-
-    async viewDetails(row) {
-      try {
-        // 获取完整的密钥信息
-        const response = await axios.get(`http://localhost:5000/api/get-key-info/${row.filename}`)
-
-        if (response.data.success) {
-          this.selectedKey = {
-            ...row,
-            keyInfo: response.data.data.密钥信息,
-            saveTime: response.data.data.保存时间,
-            fileDescription: response.data.data.文件说明
-          }
-          this.detailDialogVisible = true
-        } else {
-          this.$message.error('获取密钥详情失败')
-        }
-      } catch (error) {
-        console.error('获取密钥详情失败:', error)
-        this.$message.error('获取密钥详情失败')
-      }
-    },
-
-    async copyKey(row) {
-      try {
-        // 获取完整密钥信息用于复制
-        const response = await axios.get(`http://localhost:5000/api/get-key-info/${row.filename}`)
-
-        if (response.data.success) {
-          const keyValue = response.data.data.密钥信息.密钥
-          this.copyKeyValue(keyValue)
-        } else {
-          this.$message.error('获取密钥失败')
-        }
-      } catch (error) {
-        console.error('获取密钥失败:', error)
-        this.$message.error('获取密钥失败')
-      }
-    },
-
-    copyKeyValue(keyValue) {
-      if (keyValue) {
-        navigator.clipboard.writeText(keyValue).then(() => {
-          this.$message.success('密钥已复制到剪贴板')
-        }).catch(() => {
-          // 备用方案
-          const textArea = document.createElement('textarea')
-          textArea.value = keyValue
-          document.body.appendChild(textArea)
-          textArea.select()
-          document.execCommand('copy')
-          document.body.removeChild(textArea)
-          this.$message.success('密钥已复制到剪贴板')
-        })
-      } else {
-        this.$message.warning('没有可复制的密钥')
-      }
-    },
-
-    exportKeyInfo() {
-      if (!this.selectedKey) return
-
-      // 导出完整的密钥信息
-      const exportData = {
-        文件信息: {
-          文件名: this.selectedKey.filename,
-          保存时间: this.selectedKey.saveTime,
-          文件大小: this.formatFileSize(this.selectedKey.size)
+      this.lineageChart.setOption({
+        tooltip: {
+          trigger: 'item'
         },
-        密钥信息: this.selectedKey.keyInfo,
-        导出时间: new Date().toLocaleString('zh-CN')
+        series: [
+          {
+            type: 'graph',
+            layout: 'force',
+            roam: true,
+            draggable: true,
+            data: nodes,
+            links,
+            label: { show: true },
+            force: { repulsion: 200, edgeLength: 140 }
+          }
+        ]
+      })
+    },
+    handleResize() {
+      if (this.lineageChart) {
+        this.lineageChart.resize()
       }
-
-      const dataStr = JSON.stringify(exportData, null, 2)
-      const dataBlob = new Blob([dataStr], { type: 'application/json' })
-      const url = URL.createObjectURL(dataBlob)
-      const link = document.createElement('a')
-      link.href = url
-      link.download = `${this.selectedKey.keyInfo.加密算法}_密钥详情_${new Date().toISOString().slice(0, 10)}.json`
-      link.click()
-      URL.revokeObjectURL(url)
-
-      this.$message({
-        type: 'success',
-        message: '密钥信息已导出'
-      })
-    },
-
-    openKeyDirectory() {
-      // 提示用户手动打开目录
-      this.$alert('密钥文件保存在：E:\\DelayKeyGeneration\\keysInfo', '密钥目录', {
-        confirmButtonText: '确定',
-        type: 'info'
-      })
-    },
-
-    formatFileSize(bytes) {
-      if (!bytes) return '0 B'
-      const k = 1024
-      const sizes = ['B', 'KB', 'MB', 'GB']
-      const i = Math.floor(Math.log(bytes) / Math.log(k))
-      return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
     }
   }
 }
 </script>
 
-<style scoped>
-.app-container {
-  padding: 20px;
-}
-
-.filter-container {
-  padding-bottom: 10px;
-}
-
-.filter-item {
-  margin-right: 10px;
-}
-
-.link-type {
-  color: #409EFF;
-  cursor: pointer;
-}
-
-.link-type:hover {
-  color: #66b1ff;
-}
-
-.dialog-footer {
-  text-align: right;
-}
-
-.key-display {
-  margin: 10px 0;
-}
-
-.key-input {
-  font-family: 'Courier New', monospace;
-}
-
-.key-input .el-input__inner {
-  font-family: inherit;
-  font-size: 13px;
-  color: #303133;
+<style lang="scss" scoped>
+.sensitive-data-page {
+  padding: 16px;
   background: #f5f7fa;
-  border: 1px solid #dcdfe6;
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
 
-.key-input .el-input-group__append {
-  background: #409EFF;
-  border-color: #409EFF;
+.stat-row {
+  margin-bottom: 0;
 }
 
-.key-input .el-input-group__append .el-button {
-  background: transparent;
-  border: none;
-  color: white;
+.stat-card {
+  border-radius: 12px;
+  .stat-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    color: #606266;
+    margin-bottom: 8px;
+  }
+  .stat-value {
+    font-size: 30px;
+    font-weight: 700;
+    color: #303133;
+    margin-bottom: 6px;
+  }
+  .stat-subtitle {
+    font-size: 13px;
+    color: #909399;
+  }
 }
 
-.key-input .el-input-group__append .el-button:hover {
-  background: rgba(255, 255, 255, 0.1);
+.filter-card {
+  border-radius: 12px;
+  .filter-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
 }
 
-.el-descriptions {
-  margin-bottom: 20px;
+.data-layout {
+  display: grid;
+  grid-template-columns: 260px 1fr 320px;
+  gap: 16px;
 }
 
-.el-tag {
-  margin: 2px;
+.tree-card,
+.detail-card,
+.table-card {
+  border-radius: 12px;
 }
 
-/* 响应式设计 */
-@media (max-width: 1200px) {
-  .el-table-column {
-    min-width: 120px;
+.table-section {
+  width: 100%;
+}
+
+.detail-panel {
+  display: flex;
+}
+
+.detail-content {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.detail-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.detail-tags {
+  display: flex;
+  gap: 8px;
+}
+
+.detail-placeholder {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.lineage-card {
+  border-radius: 12px;
+}
+
+.lineage-canvas {
+  width: 100%;
+  height: 320px;
+}
+
+@media (max-width: 1280px) {
+  .data-layout {
+    grid-template-columns: 220px 1fr;
+    grid-template-areas:
+      'tree table'
+      'tree detail';
+  }
+  .detail-panel {
+    grid-column: span 2;
+  }
+}
+
+@media (max-width: 1024px) {
+  .data-layout {
+    grid-template-columns: 1fr;
+  }
+  .detail-panel {
+    order: 3;
+  }
+  .lineage-canvas {
+    height: 280px;
   }
 }
 </style>
