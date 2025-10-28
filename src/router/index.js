@@ -43,48 +43,64 @@ export const constantRoutes = [
     hidden: true
   },
 
-  // 1. 首页 - 时延分析仪表盘
+  // 1. 系统总览
   {
     path: '/',
     component: Layout,
     redirect: '/dashboard',
-    children: [{
-      path: 'dashboard',
-      name: 'Dashboard',
-      component: () => import('@/views/dashboard/index'),
-      meta: { title: '时延分析仪表盘', icon: 'dashboard' }
-    }]
-  },
-
-  // 2. 密钥请求
-  {
-    path: '/key-request',
-    component: Layout,
     children: [
       {
-        path: 'index',
-        name: 'KeyRequest',
-        component: () => import('@/views/form/index'),
-        meta: { title: '密钥请求', icon: 'form' }
+        path: 'dashboard',
+        name: 'Dashboard',
+        component: () => import('@/views/dashboard/index'),
+        meta: { title: '系统总览', icon: 'dashboard' }
       }
     ]
   },
 
-  // 3. 历史密钥管理
+  // 2. 流量监控
   {
-    path: '/key-history',
+    path: '/traffic-monitor',
     component: Layout,
     children: [
       {
         path: 'index',
-        name: 'KeyHistory',
-        component: () => import('@/views/table/index'),
-        meta: { title: '历史密钥管理', icon: 'el-icon-document' }
+        name: 'TrafficMonitor',
+        component: () => import('@/views/trafficMonitor/index'),
+        meta: { title: '流量监控', icon: 'el-icon-data-analysis' }
       }
     ]
   },
 
-  // 4. 设备管理
+  // 3. 服务拓扑
+  {
+    path: '/service-topology',
+    component: Layout,
+    children: [
+      {
+        path: 'index',
+        name: 'ServiceTopology',
+        component: () => import('@/views/serviceView/index'),
+        meta: { title: '服务拓扑', icon: 'el-icon-share' }
+      }
+    ]
+  },
+
+  // 4. 敏感数据
+  {
+    path: '/sensitive-data',
+    component: Layout,
+    children: [
+      {
+        path: 'index',
+        name: 'SensitiveData',
+        component: () => import('@/views/sensitiveData/index'),
+        meta: { title: '敏感数据', icon: 'el-icon-lock' }
+      }
+    ]
+  },
+
+  // 5. 设备管理
   {
     path: '/device-management',
     component: Layout,
