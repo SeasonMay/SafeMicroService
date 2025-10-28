@@ -23,12 +23,6 @@
           <el-option label="低危" value="L2" />
           <el-option label="提示" value="L1" />
         </el-select>
-        <el-select v-model="filters.compliance" placeholder="合规状态" clearable style="width: 160px">
-          <el-option label="全部" value="all" />
-          <el-option label="已合规" value="ok" />
-          <el-option label="待整改" value="todo" />
-          <el-option label="违规" value="violation" />
-        </el-select>
         <el-switch v-model="filters.onlyExceed" active-text="仅显示超权限" />
         <el-button type="primary" icon="el-icon-refresh" @click="refreshData">刷新数据</el-button>
       </div>
@@ -71,18 +65,16 @@
                 <el-tag :type="sensitivityTag(scope.row.sensitivity)" size="mini">{{ scope.row.sensitivity }}</el-tag>
               </template>
             </el-table-column>
-            <el-table-column prop="source" label="来源端口" width="140" />
-            <el-table-column prop="permission" label="权限级别" width="140">
+            <el-table-column prop="sourcePort" label="来源端口" width="140" />
+            <el-table-column prop="requestPath" label="请求路径" min-width="200" show-overflow-tooltip />
+            <el-table-column prop="srcIp" label="源 IP" width="150" />
+            <el-table-column prop="dstIp" label="目的 IP" width="150" />
+            <el-table-column prop="permission" label="权限校验" width="140">
               <template slot-scope="scope">
-                <el-tag :type="scope.row.permission === '合规' ? 'success' : 'warning'" size="mini">{{ scope.row.permission }}</el-tag>
+                <el-tag :type="scope.row.permission === '越权访问' ? 'danger' : 'success'" size="mini">{{ scope.row.permission }}</el-tag>
               </template>
             </el-table-column>
-            <el-table-column prop="status" label="合规状态" width="140">
-              <template slot-scope="scope">
-                <el-tag :type="statusTag(scope.row.status)" size="mini">{{ scope.row.statusLabel }}</el-tag>
-              </template>
-            </el-table-column>
-            <el-table-column prop="lastSeen" label="最近检测" width="160" />
+            <el-table-column prop="lastSeen" label="最近检测" width="170" />
           </el-table>
         </el-card>
       </section>
@@ -96,12 +88,14 @@
             <h3 class="detail-title">{{ selectedRecord.name }}</h3>
             <div class="detail-tags">
               <el-tag :type="sensitivityTag(selectedRecord.sensitivity)" effect="dark" size="mini">{{ selectedRecord.sensitivity }}</el-tag>
-              <el-tag :type="selectedRecord.permission === '合规' ? 'success' : 'warning'" size="mini">{{ selectedRecord.permission }}</el-tag>
+              <el-tag :type="selectedRecord.permission === '越权访问' ? 'danger' : 'success'" size="mini">{{ selectedRecord.permission }}</el-tag>
             </div>
             <el-descriptions :column="1" border size="small">
               <el-descriptions-item label="数据类型">{{ selectedRecord.category }}</el-descriptions-item>
               <el-descriptions-item label="来源服务">{{ selectedRecord.service }}</el-descriptions-item>
-              <el-descriptions-item label="来源端口">{{ selectedRecord.source }}</el-descriptions-item>
+              <el-descriptions-item label="来源端口">{{ selectedRecord.sourcePort }}</el-descriptions-item>
+              <el-descriptions-item label="请求路径">{{ selectedRecord.requestPath }}</el-descriptions-item>
+              <el-descriptions-item label="源 → 目的 IP">{{ `${selectedRecord.srcIp} → ${selectedRecord.dstIp}` }}</el-descriptions-item>
               <el-descriptions-item label="检测时间">{{ selectedRecord.lastSeen }}</el-descriptions-item>
               <el-descriptions-item label="风险评估">{{ selectedRecord.riskNote }}</el-descriptions-item>
               <el-descriptions-item label="传输路径">{{ selectedRecord.path.join(' → ') }}</el-descriptions-item>
@@ -132,50 +126,150 @@ export default {
   data() {
     return {
       statCards: [
-        { title: '敏感数据总量', value: '1,268', subtitle: '本周新增 128 条', tag: 'L2-L4', tagType: 'danger' },
-        { title: '分类覆盖率', value: '92%', subtitle: '共 18 类数据资产', tag: '分类完整', tagType: 'success' },
-        { title: '风险等级分布', value: '高危 12 / 中危 46', subtitle: '风险趋势下降 8%', tag: '风险监控', tagType: 'warning' },
-        { title: '合规状态', value: '78%', subtitle: '待整改 9 项', tag: '合规巡检', tagType: 'info' }
+        { title: '调度中台高敏字段', value: '328', subtitle: '今日新增 19 条策略标签', tag: '调度域', tagType: 'danger' },
+        { title: '运行监测关键指标', value: '152', subtitle: '覆盖 18 个站群', tag: '运行域', tagType: 'warning' },
+        { title: '业务中台策略字段', value: '94', subtitle: '三方接口调用 12 次', tag: '业务中台', tagType: 'info' },
+        { title: '交易结算敏感字段', value: '61', subtitle: '最新对账差异 1.8%', tag: '交易域', tagType: 'success' }
       ],
       filters: {
         keyword: '',
         risk: 'all',
-        compliance: 'all',
         onlyExceed: false
       },
       classificationTree: [
         {
           id: 1,
-          label: '个人信息',
+          label: '调度控制中台',
           children: [
-            { id: 11, label: '基础信息 (L2)' },
-            { id: 12, label: '身份认证 (L3)' },
-            { id: 13, label: '金融账户 (L4)' }
+            { id: 11, label: '安全调度指令 (L4)' },
+            { id: 12, label: '潮流断面参数 (L3)' },
+            { id: 13, label: '应急切负荷脚本 (L4)' }
           ]
         },
         {
           id: 2,
-          label: '企业机密',
+          label: '运行监测中台',
           children: [
-            { id: 21, label: '运营数据 (L3)' },
-            { id: 22, label: '调度策略 (L4)' }
+            { id: 21, label: '实时遥信指标 (L2)' },
+            { id: 22, label: '遥测基线模型 (L3)' }
           ]
         },
         {
           id: 3,
-          label: '系统内部',
+          label: '业务协同中台',
           children: [
-            { id: 31, label: '运行日志 (L1)' },
-            { id: 32, label: '关键配置 (L2)' }
+            { id: 31, label: '跨域作业授权 (L3)' },
+            { id: 32, label: '保电事件档案 (L4)' }
+          ]
+        },
+        {
+          id: 4,
+          label: '交易结算中台',
+          children: [
+            { id: 41, label: '购售电合同 (L4)' },
+            { id: 42, label: '出清凭证 (L3)' }
+          ]
+        },
+        {
+          id: 5,
+          label: '安全支撑域',
+          children: [
+            { id: 51, label: '策略发布稿 (L3)' },
+            { id: 52, label: '加密密钥片段 (L4)' }
           ]
         }
       ],
       tableData: [
-        { id: 1, name: 'customer_name', category: '个人信息', sensitivity: 'L2', source: 'TCP:443', service: 'customer-gateway', permission: '合规', status: 'ok', statusLabel: '已合规', lastSeen: '2024-07-18 13:20', riskNote: '已通过脱敏策略校验', path: ['customer-gateway', 'data-bus', 'analytics-core'] },
-        { id: 2, name: 'identity_number', category: '个人信息', sensitivity: 'L3', source: 'TCP:8443', service: 'identity-service', permission: '合规', status: 'todo', statusLabel: '待整改', lastSeen: '2024-07-18 13:18', riskNote: '接口调用频次高于基线，建议增加频控', path: ['identity-service', 'auth-center', 'risk-engine'] },
-        { id: 3, name: 'bank_account', category: '个人信息', sensitivity: 'L4', source: 'TCP:9443', service: 'billing-service', permission: '超权限', status: 'violation', statusLabel: '违规', lastSeen: '2024-07-18 12:52', riskNote: '检测到非授权服务访问账单明细', path: ['billing-service', 'export-adapter', 'external-channel'] },
-        { id: 4, name: 'dispatch_strategy', category: '企业机密', sensitivity: 'L4', source: 'TCP:7001', service: 'dispatch-scheduler', permission: '超权限', status: 'todo', statusLabel: '待整改', lastSeen: '2024-07-18 12:46', riskNote: '策略文件包含外部共享记录，需要确认权限', path: ['dispatch-scheduler', 'strategy-hub', 'partner-interface'] },
-        { id: 5, name: 'grid_metrics_raw', category: '系统内部', sensitivity: 'L2', source: 'UDP:5002', service: 'grid-metrics', permission: '合规', status: 'ok', statusLabel: '已合规', lastSeen: '2024-07-18 13:05', riskNote: '数据按计划周期上传', path: ['grid-metrics', 'metrics-cache', 'analytics-core'] }
+        {
+          id: 1,
+          name: 'dispatch_master_plan',
+          category: '调度控制中台',
+          sensitivity: 'L4',
+          sourcePort: 'TCP:7010',
+          service: 'dispatch-strategy-center',
+          permission: '越权访问',
+          lastSeen: '2024-10-19 14:56',
+          riskNote: '边缘协调器尝试拉取主站调度方案，疑似越权同步。',
+          path: ['dispatch-strategy-center', 'integration-bus', 'edge-coordinator'],
+          srcIp: '10.20.18.45',
+          dstIp: '172.16.10.3',
+          requestPath: '/v1/strategy/master-plan/export'
+        },
+        {
+          id: 2,
+          name: 'grid_data_fabric_map',
+          category: '业务协同中台',
+          sensitivity: 'L3',
+          sourcePort: 'HTTPS:7443',
+          service: 'grid-data-fabric',
+          permission: '越权访问',
+          lastSeen: '2024-10-19 14:49',
+          riskNote: '业务中台同步电压档案映射到第三方工单平台，确认是否授权。',
+          path: ['grid-data-fabric', 'service-mesh', 'partner-ticketing'],
+          srcIp: '10.33.27.14',
+          dstIp: '172.16.35.210',
+          requestPath: '/sync/archives/voltage-map/export'
+        },
+        {
+          id: 3,
+          name: 'scada_limit_profile',
+          category: '运行监测中台',
+          sensitivity: 'L3',
+          sourcePort: 'TCP:6080',
+          service: 'scada-core',
+          permission: '受控访问',
+          lastSeen: '2024-10-19 14:42',
+          riskNote: '遥测阈值曲线按计划推送，处于受控白名单。',
+          path: ['scada-core', 'data-hub', 'analysis-engine'],
+          srcIp: '10.30.5.18',
+          dstIp: '172.16.21.9',
+          requestPath: '/telemetry/limit-profile/publish'
+        },
+        {
+          id: 4,
+          name: 'market_clearing_ticket',
+          category: '交易结算中台',
+          sensitivity: 'L4',
+          sourcePort: 'HTTPS:9443',
+          service: 'market-clearing-service',
+          permission: '越权访问',
+          lastSeen: '2024-10-19 14:34',
+          riskNote: '检测到边缘结算节点批量导出结算凭证，需核实操作来源。',
+          path: ['market-clearing-service', 'settlement-adapter', 'external-clearing-node'],
+          srcIp: '10.50.2.62',
+          dstIp: '172.16.40.27',
+          requestPath: '/settlement/v2/ticket/download'
+        },
+        {
+          id: 5,
+          name: 'grid_security_token',
+          category: '安全支撑域',
+          sensitivity: 'L4',
+          sourcePort: 'TCP:5520',
+          service: 'crypto-vault',
+          permission: '越权访问',
+          lastSeen: '2024-10-19 14:25',
+          riskNote: '授权存储库外出现密钥片段调用，请立即核查密钥分发链路。',
+          path: ['crypto-vault', 'secure-gateway', 'maintenance-console'],
+          srcIp: '10.10.2.5',
+          dstIp: '172.16.5.44',
+          requestPath: '/token/segment/fetch'
+        },
+        {
+          id: 6,
+          name: 'flexible_load_order',
+          category: '调度控制中台',
+          sensitivity: 'L2',
+          sourcePort: 'MQTT:1883',
+          service: 'demand-response-hub',
+          permission: '受控访问',
+          lastSeen: '2024-10-19 14:16',
+          riskNote: '柔性负荷调度令按策略分发，已验证边缘节点响应。',
+          path: ['demand-response-hub', 'event-bus', 'flex-load-agent'],
+          srcIp: '10.25.11.33',
+          dstIp: '172.16.18.56',
+          requestPath: '/orders/flex-load/dispatch'
+        }
       ],
       selectedRecord: null,
       lineageChart: null
@@ -184,10 +278,9 @@ export default {
   computed: {
     filteredTableData() {
       return this.tableData.filter(item => {
-        if (this.filters.keyword && !`${item.name}${item.category}${item.service}`.includes(this.filters.keyword)) return false
+        if (this.filters.keyword && !`${item.name}${item.category}${item.service}${item.requestPath}${item.srcIp}${item.dstIp}`.includes(this.filters.keyword)) return false
         if (this.filters.risk && this.filters.risk !== 'all' && item.sensitivity !== this.filters.risk) return false
-        if (this.filters.compliance && this.filters.compliance !== 'all' && item.status !== this.filters.compliance) return false
-        if (this.filters.onlyExceed && item.permission !== '超权限') return false
+        if (this.filters.onlyExceed && item.permission !== '越权访问') return false
         return true
       })
     },
@@ -221,18 +314,6 @@ export default {
           return 'info'
         default:
           return 'success'
-      }
-    },
-    statusTag(status) {
-      switch (status) {
-        case 'ok':
-          return 'success'
-        case 'todo':
-          return 'warning'
-        case 'violation':
-          return 'danger'
-        default:
-          return 'info'
       }
     },
     refreshData() {
