@@ -234,6 +234,25 @@ export default {
       }
     }
   },
+  computed: {
+    selectedPairLabel() {
+      if (!this.selectedCommunication) {
+        return '未选择通信对'
+      }
+      return `当前：${this.selectedCommunication.source} → ${this.selectedCommunication.target}`
+    },
+    pairChartSubtitle() {
+      if (!this.selectedCommunication) {
+        return ''
+      }
+      return `${this.selectedCommunication.protocol} | ${this.selectedCommunication.source} → ${this.selectedCommunication.target}`
+    }
+  },
+  watch: {
+    analysisGranularity() {
+      this.updateTimeSeriesChart()
+    }
+  },
   mounted() {
     this.$nextTick(() => {
       this.initCharts()
@@ -526,6 +545,7 @@ export default {
         default:
           return 'default'
       }
+      this.$message.info('筛选条件已重置')
     },
     handleResize() {
       Object.keys(this.charts).forEach(key => {
